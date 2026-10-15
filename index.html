@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Untuk Kamu 💖</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background: linear-gradient(135deg, #ffd1dc 0%, #ffb6c1 50%, #ffc0cb 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Hati berjatuhan */
+        .heart {
+            position: fixed;
+            top: -50px;
+            font-size: 24px;
+            animation: fall linear infinite;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 30px;
+            padding: 40px 30px;
+            max-width: 550px;
+            width: 100%;
+            box-shadow: 0 20px 50px rgba(255, 105, 180, 0.4);
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            border: 3px dashed #ff8fab;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        h1 {
+            font-family: 'Pacifico', cursive;
+            color: #ff4d88;
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(255, 182, 193, 0.6);
+        }
+
+        .emoji-top {
+            font-size: 3em;
+            margin-bottom: 10px;
+            animation: bounce 1.5s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        .card {
+            background: linear-gradient(135deg, #fff0f5, #ffe4ec);
+            border-radius: 20px;
+            padding: 25px 20px;
+            margin: 20px 0;
+            border: 2px solid #ffb6c1;
+            box-shadow: inset 0 0 15px rgba(255, 182, 193, 0.3);
+        }
+
+        .card-title {
+            font-family: 'Pacifico', cursive;
+            color: #ff69b4;
+            font-size: 1.3em;
+            margin-bottom: 12px;
+        }
+
+        .card-text {
+            color: #c71585;
+            font-size: 1.15em;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff69b4, #ff1493);
+            color: white;
+            border: none;
+            padding: 15px 35px;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            box-shadow: 0 8px 20px rgba(255, 105, 180, 0.5);
+            transition: all 0.3s;
+            font-family: 'Quicksand', sans-serif;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 25px rgba(255, 105, 180, 0.7);
+        }
+
+        .btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .footer {
+            margin-top: 20px;
+            color: #ff69b4;
+            font-size: 0.9em;
+            font-style: italic;
+        }
+
+        .sparkle {
+            display: inline-block;
+            animation: sparkle 1.5s infinite;
+        }
+
+        @keyframes sparkle {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="emoji-top">💖</div>
+        <h1>Hai Sayang!</h1>
+        <p style="color:#ff69b4; font-weight:600;">Website ini dibuat khusus buat kamu 💌</p>
+
+        <div class="card">
+            <div class="card-title">✨ Semangat Hari Ini ✨</div>
+            <p class="card-text">{{ pesan }}</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">💕 Alasan Aku Sayang Kamu 💕</div>
+            <p class="card-text">{{ alasan }}</p>
+        </div>
+
+        <button class="btn" onclick="location.reload()">
+            🎀 Kasih Aku Pesan Baru 🎀
+        </button>
+
+        <p class="footer">
+            Made with <span class="sparkle">💗</span> by pacar kamu yang paling ganteng
+        </p>
+    </div>
+
+    <script>
+        // Bikin hati berjatuhan
+        const emojis = ['💖', '💕', '💗', '🌸', '💝', '🎀', '💞', '🩷'];
+        function createHeart() {
+            const heart = document.createElement('div');
+            heart.classList.add('heart');
+            heart.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+            heart.style.left = Math.random() * 100 + 'vw';
+            heart.style.animationDuration = (Math.random() * 3 + 4) + 's';
+            heart.style.fontSize = (Math.random() * 20 + 15) + 'px';
+            document.body.appendChild(heart);
+            setTimeout(() => heart.remove(), 7000);
+        }
+        setInterval(createHeart, 300);
+    </script>
+
+</body>
+</html>
