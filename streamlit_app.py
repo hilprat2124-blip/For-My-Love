@@ -836,4 +836,363 @@ def inject_global_effects():
 
             P.__loveFireworksFullScreen = function() {
                 const existing = P.document.getElementById('love-fw-canvas');
-                if (existing
+                if (existing) existing.remove();
+
+                const fw = P.document.createElement('canvas');
+                fw.id = 'love-fw-canvas';
+                fw.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9998;';
+                fw.width = P.innerWidth;
+                fw.height = P.innerHeight;
+                P.document.body.appendChild(fw);
+
+                const ctx = fw.getContext('2d');
+                const particles = [];
+                const colors = ['#ff7fae','#d6336c','#ffb3cc','#ffd9a0','#ffe8b0','#ffffff','#f9a8c9','#e8879f'];
+
+                function createFirework(x, y) {
+                    const count = 60 + Math.floor(Math.random() * 30);
+                    const baseHue = colors[Math.floor(Math.random() * colors.length)];
+                    for (let i = 0; i < count; i++) {
+                        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
+                        const speed = Math.random() * 6 + 2;
+                        particles.push({
+                            x, y,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            life: 1,
+                            decay: 0.010 + Math.random() * 0.008,
+                            color: Math.random() < 0.7 ? baseHue : colors[Math.floor(Math.random()*colors.length)],
+                            size: Math.random() * 2.8 + 1.8
+                        });
+                    }
+                }
+
+                let active = true;
+                function animate() {
+                    ctx.fillStyle = 'rgba(255, 233, 240, 0.14)';
+                    ctx.fillRect(0, 0, fw.width, fw.height);
+                    for (let i = particles.length - 1; i >= 0; i--) {
+                        const p = particles[i];
+                        p.x += p.vx; p.y += p.vy;
+                        p.vy += 0.045;
+                        p.vx *= 0.985; p.vy *= 0.985;
+                        p.life -= p.decay;
+                        if (p.life <= 0) { particles.splice(i, 1); continue; }
+                        ctx.globalAlpha = Math.max(p.life, 0);
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                    if (active || particles.length > 0) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        fw.remove();
+                    }
+                }
+                animate();
+
+                const start = Date.now();
+                const interval = setInterval(() => {
+                    if (Date.now() - start > 12000) {
+                        clearInterval(interval);
+                        active = false;
+                        return;
+                    }
+                    createFirework(
+                        Math.random() * fw.width,
+                        Math.random() * fw.height * 0.7 + 50
+                    );
+                }, 400);
+
+                setTimeout(() => createFirework(fw.width * 0.5, fw.height * 0.3), 200);
+                setTimeout(() => createFirework(fw.width * 0.25, fw.height * 0.45), 500);
+                setTimeout(() => createFirework(fw.width * 0.75, fw.height * 0.4), 800);
+            };
+
+            // Listen postMessage untuk fireworks
+            P.addEventListener('message', function(ev) {
+                if (ev.data && ev.data.__loveFireworks) {
+                    P.__loveFireworksFullScreen();
+                }
+            });
+        })();
+    </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
+# ================== PASANG SEMUA ==================
+inject_global_effects()
+render_music_player()
+
+if st.session_state.sfx:
+    trigger_sfx(st.session_state.sfx, st.session_state.sfx_id)
+    st.session_state.sfx = ""
+
+
+# ================== HALAMAN 0: AWAL ==================
+if st.session_state.step == 0:
+    st.markdown('<div class="judul">Hai, kamu 🌸</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="subjudul">aku nitipin sesuatu di kotak ini. '
+        'buka pelan-pelan ya, jangan sekaligus.</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        '<div class="box-wrap"><div class="box">🎁</div></div>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("Buka kotaknya 💌"):
+        st.session_state.step = 1
+        ambil_pesan_baru()
+        st.session_state.sfx = "pop"
+        st.session_state.sfx_id += 1
+        st.rerun()
+
+
+# ================== HALAMAN 1: BUKA KOTAK ==================
+elif st.session_state.step == 1:
+    st.markdown('<div class="judul">Sebuah pesan untukmu</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="pesan-card" key="p{st.session_state.key_pesan}">'
+        f'{st.session_state.pesan_sekarang}</div>',
+        unsafe_allow_html=True
+    )
+
+    sisa = len(st.session_state.sisa_pesan)
+    total = len(kata_nugas)
+    sudah = total - sisa
+
+    st.markdown(
+        f'<div class="counter">kotak yang sudah kamu buka — {sudah} dari {total} 🌸</div>',
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if sisa > 0:
+        if st.button("Lanjut, buka kotak berikutnya 🌷"):
+            ambil_pesan_baru()
+            st.session_state.sfx = "ding"
+            st.session_state.sfx_id += 1
+            st.rerun()
+    else:
+        st.markdown(
+            '<div class="counter">kotaknya sudah habis... '
+            'tapi masih ada satu hal lagi untukmu</div>',
+            unsafe_allow_html=True
+        )
+        if st.button("Buka yang terakhir ✨"):
+            st.session_state.step = 99
+            st.session_state.sfx = "chime"
+            st.session_state.sfx_id += 1
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Ulang dari awal"):
+        reset_semua()
+        st.session_state.sfx = "reset"
+        st.session_state.sfx_id += 1
+        st.rerun()
+
+
+# ================== HALAMAN 99: SURPRISE ==================
+elif st.session_state.step == 99:
+
+    trigger_fireworks()
+
+    if FOTO_B64:
+        foto_html = f'''
+        <div class="foto-frame">
+            <div class="foto-inner">
+                <img src="data:image/jpeg;base64,{FOTO_B64}" alt="Kita berdua" />
+            </div>
+            <div class="foto-caption">kita, dan semua momen kecil ini 💕</div>
+        </div>
+        '''
+    else:
+        foto_html = '''
+        <div class="foto-frame foto-placeholder">
+            <div class="foto-inner">
+                <div style="display:flex;align-items:center;justify-content:center;
+                            height:100%;color:#d6336c;font-size:0.9em;
+                            text-align:center;padding:20px;">
+                    (taruh foto kalian di<br>assets/foto.jpg ya 💕)
+                </div>
+            </div>
+        </div>
+        '''
+
+    html_surprise = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Nunito:wght@400;600;700&display=swap');
+        html, body {{ margin:0; padding:0; background:transparent; font-family:'Nunito',sans-serif; overflow:hidden; }}
+
+        .konten {{
+            position:relative; z-index:3;
+            background:rgba(255,255,255,0.96);
+            border-radius:26px;
+            padding:36px 30px 30px 30px;
+            margin:16px auto;
+            max-width:640px;
+            box-shadow:0 22px 55px rgba(214,51,108,0.28),
+                       0 0 0 3px rgba(255,179,204,0.55);
+            text-align:center;
+            animation:popIn 1.1s cubic-bezier(0.22,1,0.36,1);
+        }}
+        @keyframes popIn {{
+            0% {{ opacity:0; transform:scale(0.82) translateY(20px); filter:blur(6px); }}
+            60% {{ filter:blur(0); }}
+            100% {{ opacity:1; transform:scale(1) translateY(0); }}
+        }}
+
+        .foto-frame {{
+            display: inline-block;
+            background: #fff;
+            padding: 14px 14px 50px 14px;
+            border-radius: 4px;
+            box-shadow:
+                0 14px 38px rgba(214, 51, 108, 0.32),
+                0 4px 10px rgba(0,0,0,0.08),
+                inset 0 0 0 1px rgba(255, 179, 204, 0.5);
+            transform: rotate(-2.2deg);
+            margin: 8px auto 24px auto;
+            position: relative;
+            transition: transform 0.4s ease;
+            animation: fotoIn 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+        }}
+        .foto-frame:hover {{ transform: rotate(0deg) scale(1.03); }}
+
+        @keyframes fotoIn {{
+            0% {{ opacity:0; transform: rotate(-8deg) scale(0.7) translateY(30px); }}
+            100% {{ opacity:1; transform: rotate(-2.2deg) scale(1) translateY(0); }}
+        }}
+
+        .foto-frame::before {{
+            content: "";
+            position: absolute;
+            top: -12px; left: 50%;
+            transform: translateX(-50%) rotate(-3deg);
+            width: 90px; height: 26px;
+            background: linear-gradient(135deg, rgba(255,179,204,0.85), rgba(255,143,187,0.85));
+            border-radius: 2px;
+            box-shadow: 0 2px 6px rgba(214,51,108,0.25);
+            opacity: 0.92;
+        }}
+
+        .foto-inner {{
+            width: 260px; height: 260px;
+            overflow: hidden;
+            background: #ffe9f0;
+            border-radius: 2px;
+            position: relative;
+        }}
+        .foto-inner img {{
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+            filter: saturate(1.05) contrast(1.02) brightness(1.03);
+        }}
+
+        .foto-caption {{
+            position: absolute;
+            bottom: 12px; left: 0; right: 0;
+            text-align: center;
+            font-family: 'Caveat', cursive;
+            font-size: 1.25em;
+            color: #d6336c;
+            letter-spacing: 0.3px;
+        }}
+
+        .foto-frame::after {{
+            content: "💕";
+            position: absolute;
+            bottom: 14px; right: 16px;
+            font-size: 18px;
+            opacity: 0.85;
+            animation: heartbeat 2s ease-in-out infinite;
+        }}
+
+        @keyframes heartbeat {{
+            0%, 100% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.18); }}
+        }}
+
+        .judul-surprise {{
+            font-family:'Caveat', cursive;
+            font-size:2.4em;
+            color:#d6336c;
+            margin-bottom:6px;
+            letter-spacing:0.5px;
+            animation:heartbeat 2.4s ease-in-out infinite;
+        }}
+
+        .garis {{
+            width:60px; height:3px;
+            background:linear-gradient(90deg, transparent, #ff7fae, transparent);
+            margin:14px auto 22px auto;
+            border-radius:3px;
+            animation:fadeIn 1.6s ease-out;
+        }}
+        @keyframes fadeIn {{ from {{ opacity:0; width:0; }} to {{ opacity:1; width:60px; }} }}
+
+        .paragraf {{
+            color:#a1255a;
+            font-size:1.04em;
+            line-height:1.9;
+            text-align:left;
+            font-weight:500;
+            opacity:0;
+            animation:fadeUp 1.4s ease-out 1.2s forwards;
+        }}
+        @keyframes fadeUp {{
+            from {{ opacity:0; transform:translateY(14px); }}
+            to {{ opacity:1; transform:translateY(0); }}
+        }}
+        .ttd {{
+            margin-top:24px;
+            color:#d6336c;
+            font-family:'Caveat', cursive;
+            font-size:1.5em;
+            text-align:right;
+            opacity:0;
+            animation:fadeUp 1.4s ease-out 2.2s forwards;
+        }}
+    </style>
+    </head>
+    <body>
+    <div class="konten">
+        <div class="judul-surprise">Untuk kamu 🌸</div>
+        <div class="garis"></div>
+        {foto_html}
+        <div class="paragraf">{kalimat_penutup}</div>
+        <div class="ttd">— dari aku, yang sayang banget sama kamu</div>
+    </div>
+    </body>
+    </html>
+    """
+
+    components.html(html_surprise, height=900, scrolling=False)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Ulang dari awal ya"):
+        reset_semua()
+        st.session_state.sfx = "reset"
+        st.session_state.sfx_id += 1
+        st.rerun()
+
+
+# ================== FOOTER ==================
+st.markdown(
+    '<div class="footer">dibuat sambil mikirin kamu terus</div>',
+    unsafe_allow_html=True
+)
