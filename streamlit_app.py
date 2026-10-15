@@ -31,10 +31,6 @@ kalimat_penutup = (
     "I LOVE YOU SOOOOOOOOOO MMMMUUUUUUCCCHHHHH SAYANGGGG!!!!!!"
 )
 
-# ================== YOUTUBE VIDEO ID ==================
-# Video: https://www.youtube.com/watch?v=1_fy-sSl6qk
-YOUTUBE_VIDEO_ID = "1_fy-sSl6qk"
-
 # ================== CSS ==================
 st.markdown("""
 <style>
@@ -185,16 +181,6 @@ st.markdown("""
         opacity: 0.7;
         font-style: italic;
     }
-
-    /* Sembunyikan iframe YouTube biar gak keliatan */
-    iframe[title="youtube_audio_hidden"] {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        pointer-events: none;
-        left: -9999px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -217,10 +203,6 @@ if "key_pesan" not in st.session_state:
 if "sfx" not in st.session_state:
     st.session_state.sfx = ""
 
-# Musik source: 'piano' (auto) atau 'youtube' (manual play)
-if "music_source" not in st.session_state:
-    st.session_state.music_source = "piano"
-
 
 def ambil_pesan_baru():
     if not st.session_state.sisa_pesan:
@@ -240,7 +222,7 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE — Piano synth + SFX (permanen di parent)
+# AUDIO ENGINE — PIANO SUITE, "Through The Years" vibes (soft ballad)
 # =====================================================================
 def inject_audio_engine():
     html = """
@@ -249,19 +231,21 @@ def inject_audio_engine():
     <script>
         (function() {
             const P = window.parent;
-            if (P.__lovePianoV2) return;
-            P.__lovePianoV2 = true;
+            if (P.__loveThroughYears) return;
+            P.__loveThroughYears = true;
 
             const AudioCtx = P.AudioContext || P.webkitAudioContext;
             P.__loveCtx = new AudioCtx();
 
-            P.__musicVolume = 1.0;
-            P.__sfxVolume = 0.85;
+            // ============ VOLUME DIKECILIN BIAR SOFT ============
+            P.__musicVolume = 0.55;   // <== soft, gak nyaring
+            P.__sfxVolume = 0.55;
             P.__musicRunning = false;
             P.__musicTimer = null;
             P.__musicEnabled = true;
             P.__lastSfxAt = 0;
 
+            // ============ REVERB LEMBUT (ruangan besar, kayak piano di gereja) ============
             function makeReverbIR(ctx, duration, decay) {
                 const rate = ctx.sampleRate;
                 const length = rate * duration;
@@ -275,14 +259,15 @@ def inject_audio_engine():
                 return impulse;
             }
 
-            const reverbIR = makeReverbIR(P.__loveCtx, 3.5, 3);
+            const reverbIR = makeReverbIR(P.__loveCtx, 4.5, 2.5); // reverb lebih panjang = lebih "dreamy"
             const reverb = P.__loveCtx.createConvolver();
             reverb.buffer = reverbIR;
+
             const reverbGain = P.__loveCtx.createGain();
-            reverbGain.gain.value = 0.35;
+            reverbGain.gain.value = 0.45; // reverb lebih dominan → suara lebih "luas"
 
             const masterGain = P.__loveCtx.createGain();
-            masterGain.gain.value = 1.0;
+            masterGain.gain.value = 0.7; // total volume agak diturunin biar soft
 
             reverb.connect(reverbGain);
             reverbGain.connect(masterGain);
@@ -291,17 +276,21 @@ def inject_audio_engine():
             P.__loveMaster = masterGain;
             P.__loveReverb = reverb;
 
+            // ================================================================
+            // PIANO SYNTHESIS — versi lebih lembut (kurangi harmonic tinggi)
+            // Harmonic tinggi bikin suara "tajam", kita kurangi biar hangat
+            // ================================================================
             function playPiano(freq, startTime, duration, volume) {
                 const ctx = P.__loveCtx;
                 if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
 
+                // Harmonic dengan high-cut → suara lebih "mellow"/soft
                 const harmonics = [
                     { mult: 1, gain: 1.0,  type: 'sine' },
-                    { mult: 2, gain: 0.55, type: 'sine' },
-                    { mult: 3, gain: 0.30, type: 'sine' },
-                    { mult: 4, gain: 0.18, type: 'sine' },
-                    { mult: 5, gain: 0.10, type: 'sine' },
-                    { mult: 6, gain: 0.06, type: 'sine' },
+                    { mult: 2, gain: 0.42, type: 'sine' },   // dikurangi dari 0.55
+                    { mult: 3, gain: 0.18, type: 'sine' },   // dikurangi dari 0.30
+                    { mult: 4, gain: 0.08, type: 'sine' },   // dikurangi dari 0.18
+                    // harmonic 5 & 6 dihapus → suara lebih hangat, gak "metalik"
                 ];
 
                 harmonics.forEach(h => {
@@ -311,20 +300,23 @@ def inject_audio_engine():
                     o.frequency.value = freq * h.mult;
 
                     const amp = volume * h.gain;
+                    // Attack lebih LEMBUT (0.02 bukan 0.008) — biar kayak hammer piano lembut
                     g.gain.setValueAtTime(0.0001, startTime);
-                    g.gain.exponentialRampToValueAtTime(amp, startTime + 0.008);
-                    g.gain.exponentialRampToValueAtTime(amp * 0.6, startTime + 0.15);
-                    g.gain.exponentialRampToValueAtTime(amp * 0.25, startTime + duration * 0.5);
+                    g.gain.exponentialRampToValueAtTime(amp, startTime + 0.02);
+                    g.gain.exponentialRampToValueAtTime(amp * 0.7, startTime + 0.2);
+                    g.gain.exponentialRampToValueAtTime(amp * 0.3, startTime + duration * 0.5);
                     g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
                     o.connect(g);
+
+                    // Dry lebih kecil, wet (reverb) lebih besar = suara lebih "soft & dreamy"
                     const dryGain = ctx.createGain();
-                    dryGain.gain.value = 0.75;
+                    dryGain.gain.value = 0.55;
                     g.connect(dryGain);
                     dryGain.connect(masterGain);
 
                     const wetGain = ctx.createGain();
-                    wetGain.gain.value = 0.35;
+                    wetGain.gain.value = 0.55; // reverb lebih banyak dari sebelumnya (0.35)
                     g.connect(wetGain);
                     wetGain.connect(reverb);
 
@@ -333,18 +325,49 @@ def inject_audio_engine():
                 });
             }
 
-            const melody = [
-                440.00, 523.25, 659.25, 523.25,
-                440.00, 523.25, 698.46, 523.25,
-                523.25, 659.25, 783.99, 659.25,
-                493.88, 587.33, 739.99, 587.33,
+            // ================================================================
+            // MUSIK: "Through The Years" vibes
+            // Ballad 80an — progresi: C - Em - F - G (I - iii - IV - V)
+            // Ditambah warna maj7 & sus untuk nuansa hangat & romantis
+            //
+            // Chord yang dipakai (dengan 7th untuk warna):
+            //   Cmaj7  : C  E  G  B
+            //   Em7    : E  G  B  D
+            //   Fmaj7  : F  A  C  E
+            //   G7sus  : G  C  D  F  (suspended, manis)
+            // ================================================================
+
+            // Bass line (1 not per bar) — rendah & panjang
+            const bassLine = [
+                130.81,  // C3
+                164.81,  // E3
+                174.61,  // F3
+                196.00,  // G3
             ];
-            const bassLine = [110.00, 87.31, 130.81, 98.00];
-            const arpPattern = [
-                [220.00, 261.63, 329.63, 261.63],
-                [174.61, 220.00, 261.63, 220.00],
-                [261.63, 329.63, 392.00, 329.63],
-                [196.00, 246.94, 293.66, 246.94],
+
+            // Arpeggio pengiring — chord tone dalam 1 bar (4 not)
+            const arpChords = [
+                // Cmaj7: C4 E4 G4 B4
+                [261.63, 329.63, 392.00, 493.88],
+                // Em7: E4 G4 B4 D5
+                [329.63, 392.00, 493.88, 587.33],
+                // Fmaj7: F4 A4 C5 E5
+                [349.23, 440.00, 523.25, 659.25],
+                // G7sus: G4 C5 D5 F5
+                [392.00, 523.25, 587.33, 698.46],
+            ];
+
+            // Melodi utama — mengalir naik-turun, ballad feel
+            // Pola: naik → puncak → turun lembut → resolusi
+            const melodyPhrases = [
+                // Phrase 1 (di atas Cmaj7): C5 - E5 - G5 - E5 (naik lalu turun)
+                [523.25, 659.25, 783.99, 659.25],
+                // Phrase 2 (di atas Em7): D5 - E5 - G5 - B5 (naik ke puncak)
+                [587.33, 659.25, 783.99, 987.77],
+                // Phrase 3 (di atas Fmaj7): A5 - G5 - F5 - E5 (turun lembut)
+                [880.00, 783.99, 698.46, 659.25],
+                // Phrase 4 (di atas G7sus): D5 - E5 - D5 - C5 (resolusi tenang)
+                [587.33, 659.25, 587.33, 523.25],
             ];
 
             let step = 0;
@@ -354,30 +377,38 @@ def inject_audio_engine():
                 const barIdx = step % 4;
                 const baseTime = atTime;
 
-                playPiano(bassLine[barIdx], baseTime, 3.6, 0.32 * vol);
+                // Bass — panjang 4 detik
+                playPiano(bassLine[barIdx], baseTime, 4.2, 0.30 * vol);
 
-                const arp = arpPattern[barIdx];
+                // Arpeggio 4 not pengiring (tiap 0.85 detik = tempo lambat)
+                const arp = arpChords[barIdx];
                 for (let i = 0; i < arp.length; i++) {
-                    playPiano(arp[i], baseTime + i * 0.72, 1.6, 0.16 * vol);
+                    playPiano(arp[i], baseTime + i * 0.85, 2.0, 0.14 * vol);
                 }
 
-                const startMel = step * 4;
+                // Melodi utama 4 not per bar
+                const phrase = melodyPhrases[barIdx];
                 for (let i = 0; i < 4; i++) {
-                    const note = melody[(startMel + i) % melody.length];
-                    playPiano(note, baseTime + i * 0.72 + 0.05, 1.8, 0.22 * vol);
-                    playPiano(note * 2, baseTime + i * 0.72 + 0.08, 1.2, 0.06 * vol);
+                    const note = phrase[i];
+                    // Attack sedikit "di belakang" biar feel-nya relaxed (kayak penyanyi ballad)
+                    playPiano(note, baseTime + i * 0.85 + 0.1, 2.2, 0.20 * vol);
+                    // Harmonic oktaf atas tipis untuk sparkle
+                    playPiano(note * 2, baseTime + i * 0.85 + 0.15, 1.4, 0.045 * vol);
                 }
+
                 step++;
             }
 
             function startMusicLoop() {
                 if (!P.__musicEnabled || P.__musicRunning) return;
                 P.__musicRunning = true;
+
                 function loop() {
                     if (!P.__musicRunning || !P.__musicEnabled) return;
                     const now = P.__loveCtx.currentTime + 0.05;
                     playMeasure(now);
-                    P.__musicTimer = setTimeout(loop, 3000);
+                    // 1 bar = 3.4 detik (4 ketuk × 0.85 detik = tempo lambat ballad)
+                    P.__musicTimer = setTimeout(loop, 3400);
                 }
                 loop();
             }
@@ -387,34 +418,44 @@ def inject_audio_engine():
                 if (P.__musicTimer) { clearTimeout(P.__musicTimer); P.__musicTimer = null; }
             }
 
+            // ================================================================
+            // SFX — pakai piano synth juga, volume soft biar konsisten
+            // ================================================================
             function sfxPop() {
                 const now = P.__loveCtx.currentTime;
-                playPiano(880, now, 0.9, 0.55 * P.__sfxVolume);
-                playPiano(1318.51, now + 0.08, 1.0, 0.42 * P.__sfxVolume);
+                playPiano(880, now, 1.0, 0.45 * P.__sfxVolume);
+                playPiano(1318.51, now + 0.08, 1.1, 0.35 * P.__sfxVolume);
             }
+
             function sfxDing() {
                 const now = P.__loveCtx.currentTime;
                 [1174.66, 1479.98, 1760.00].forEach((f, i) => {
-                    playPiano(f, now + i * 0.06, 1.3, 0.35 * P.__sfxVolume);
-                });
-            }
-            function sfxChime() {
-                const now = P.__loveCtx.currentTime;
-                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {
-                    playPiano(f, now + i * 0.1, 1.8, 0.32 * P.__sfxVolume);
-                });
-            }
-            function sfxReset() {
-                const now = P.__loveCtx.currentTime;
-                [880, 659.25, 440].forEach((f, i) => {
-                    playPiano(f, now + i * 0.09, 0.9, 0.35 * P.__sfxVolume);
+                    playPiano(f, now + i * 0.07, 1.4, 0.30 * P.__sfxVolume);
                 });
             }
 
+            function sfxChime() {
+                const now = P.__loveCtx.currentTime;
+                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {
+                    playPiano(f, now + i * 0.12, 2.0, 0.28 * P.__sfxVolume);
+                });
+            }
+
+            function sfxReset() {
+                const now = P.__loveCtx.currentTime;
+                [880, 659.25, 440].forEach((f, i) => {
+                    playPiano(f, now + i * 0.1, 1.0, 0.30 * P.__sfxVolume);
+                });
+            }
+
+            // ================================================================
+            // API
+            // ================================================================
             P.__lovePlaySfx = function(name) {
                 const now = Date.now();
-                if (now - P.__lastSfxAt < 250) return;
+                if (now - P.__lastSfxAt < 250) return;  // debounce, anti-double
                 P.__lastSfxAt = now;
+
                 if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{});
                 try {
                     if (name === 'pop') sfxPop();
@@ -471,7 +512,7 @@ def inject_audio_engine():
 
 
 # =====================================================================
-# TRIGGER SFX via postMessage (sekali doang, gak double)
+# TRIGGER SFX — kirim SEKALI doang
 # =====================================================================
 def trigger_sfx(sfx_name: str):
     if not sfx_name:
@@ -484,119 +525,6 @@ def trigger_sfx(sfx_name: str):
             try {{
                 window.parent.postMessage({{ __loveSfx: '{sfx_name}' }}, '*');
             }} catch(e) {{}}
-        }})();
-    </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-# =====================================================================
-# YOUTUBE PLAYER — Hidden, volume rendah, autoplay setelah interaksi pertama
-# =====================================================================
-def render_youtube_player():
-    html = f"""
-    <!DOCTYPE html><html><head>
-    <style>
-        body {{ margin:0; padding:0; background:transparent; overflow:hidden; }}
-    </style>
-    </head>
-    <body>
-    <div id="ytWrap" style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;">
-        <div id="ytPlayer"></div>
-    </div>
-
-    <script>
-        (function() {{
-            const P = window.parent;
-            const VIDEO_ID = "{YOUTUBE_VIDEO_ID}";
-            const SOFT_VOLUME = 22; // 22% — soft banget
-
-            // Kalau player udah ada dari rerun sebelumnya, update volume & coba play
-            if (P.__loveYtPlayer) {{
-                try {{
-                    P.__loveYtPlayer.setVolume(SOFT_VOLUME);
-                    P.__loveYtPlayer.playVideo();
-                }} catch(e) {{}}
-                return;
-            }}
-
-            // Muat YouTube IFrame API
-            function loadYT() {{
-                if (P.__loveYtApiLoaded) {{
-                    initPlayer();
-                    return;
-                }}
-                P.__loveYtApiLoaded = true;
-                const tag = P.document.createElement('script');
-                tag.src = "https://www.youtube.com/iframe_api";
-                P.document.head.appendChild(tag);
-
-                P.onYouTubeIframeAPIReady = function() {{
-                    initPlayer();
-                }};
-            }}
-
-            function initPlayer() {{
-                // Buat div player di parent document (bukan di iframe)
-                let container = P.document.getElementById('__loveYtContainer');
-                if (!container) {{
-                    container = P.document.createElement('div');
-                    container.id = '__loveYtContainer';
-                    container.style.cssText = 'position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;';
-                    P.document.body.appendChild(container);
-                }}
-
-                P.__loveYtPlayer = new P.YT.Player(container, {{
-                    videoId: VIDEO_ID,
-                    playerVars: {{
-                        autoplay: 1,
-                        loop: 1,
-                        playlist: VIDEO_ID,
-                        controls: 0,
-                        disablekb: 1,
-                        fs: 0,
-                        modestbranding: 1,
-                        playsinline: 1
-                    }},
-                    events: {{
-                        onReady: function(e) {{
-                            e.target.setVolume(SOFT_VOLUME);
-                            // Coba play — kalau diblokir, tunggu interaksi user
-                            tryPlay();
-                        }},
-                        onStateChange: function(e) {{
-                            // Kalau ke-pause, coba play lagi
-                            if (e.data === 2) {{
-                                setTimeout(() => {{
-                                    try {{ P.__loveYtPlayer.playVideo(); }} catch(err) {{}}
-                                }}, 300);
-                            }}
-                        }}
-                    }}
-                }});
-            }}
-
-            function tryPlay() {{
-                try {{
-                    P.__loveYtPlayer.playVideo();
-                }} catch(e) {{}}
-            }}
-
-            // Attempt: pasang listener di parent — begitu user interaksi, play
-            const events = ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'];
-            events.forEach(ev => {{
-                P.document.addEventListener(ev, function once() {{
-                    try {{
-                        if (P.__loveYtPlayer && P.__loveYtPlayer.setVolume) {{
-                            P.__loveYtPlayer.setVolume(SOFT_VOLUME);
-                            P.__loveYtPlayer.playVideo();
-                        }}
-                    }} catch(e) {{}}
-                }}, {{ capture: true, passive: true }});
-            }});
-
-            loadYT();
         }})();
     </script>
     </body></html>
@@ -642,23 +570,10 @@ def render_music_toggle():
         }
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            // Toggle musik piano
             if (typeof P.__loveToggleMusic === 'function') {
                 P.__loveToggleMusic();
+                setTimeout(refresh, 100);
             }
-            // Toggle YouTube juga kalau ada
-            try {
-                if (P.__loveYtPlayer && P.__loveYtPlayer.getPlayerState) {
-                    const state = P.__loveYtPlayer.getPlayerState();
-                    if (state === 1) {
-                        P.__loveYtPlayer.pauseVideo();
-                    } else {
-                        P.__loveYtPlayer.setVolume(22);
-                        P.__loveYtPlayer.playVideo();
-                    }
-                }
-            } catch(err) {}
-            setTimeout(refresh, 100);
         });
         setInterval(refresh, 1000);
         refresh();
@@ -668,9 +583,8 @@ def render_music_toggle():
     components.html(html, height=0)
 
 
-# ================== PASANG SEMUA ==================
+# ================== PASANG AUDIO ENGINE ==================
 inject_audio_engine()
-render_youtube_player()   # <-- YouTube soft volume
 render_music_toggle()
 
 if st.session_state.sfx:
