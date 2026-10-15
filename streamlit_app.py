@@ -11,7 +11,7 @@ st.set_page_config(
 
 # ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
-    "Sayang... aku tahu kamu capek, tapi aku percaya kamu pasti bisa. Semangat ya, cintakuu.",
+    "Sayang... aku tau kamu capek, tapi aku percaya kamu pasti bisa. Semangat ya, cintakuu.",
     "Aku tau tugas kamu banyak, tapi aku juga tahu kamu sekuat itu. Aku bangga banget sama kamu.",
     "Capek boleh, istirahat dulu juga boleh. Kamu nggak harus selalu kuat setiap saat, yaa... Aku tetap bangga sama kamu, apa pun hasilnya.",
     "Coba nugas sambil bayangin aku lagi nemenin kamu, yaa. Anggap aja aku lagi duduk di samping kamu sambil elus kepala kamu. 🤍",
