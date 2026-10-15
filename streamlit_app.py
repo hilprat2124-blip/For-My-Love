@@ -16,8 +16,11 @@ FOTO_PATH = "assets/foto.jpg"
 
 def load_foto_base64():
     if os.path.exists(FOTO_PATH):
-        with open(FOTO_PATH, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        try:
+            with open(FOTO_PATH, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        except Exception as e:
+            print(f"Error load foto: {e}")
     return None
 
 FOTO_B64 = load_foto_base64()
@@ -27,11 +30,24 @@ LAGU_PATH = "assets/lagu.mp3"
 
 def load_lagu_base64():
     if os.path.exists(LAGU_PATH):
-        with open(LAGU_PATH, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        try:
+            with open(LAGU_PATH, "rb") as f:
+                data = f.read()
+            print(f"✅ Lagu loaded: {len(data)} bytes")
+            return base64.b64encode(data).decode()
+        except Exception as e:
+            print(f"❌ Error load lagu: {e}")
+    else:
+        print(f"❌ File tidak ditemukan: {LAGU_PATH}")
     return None
 
 LAGU_B64 = load_lagu_base64()
+
+# Cek juga kalau lagu.mp3 di root (bukan di assets/)
+if not LAGU_B64 and os.path.exists("lagu.mp3"):
+    with open("lagu.mp3", "rb") as f:
+        LAGU_B64 = base64.b64encode(f.read()).decode()
+    print("✅ Lagu loaded dari root folder")
 
 # ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
@@ -249,68 +265,148 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE — pasang AUDIO ELEMENT di parent + unlock audio
+# AUDIO PLAYER — pakai pendekatan PALING SEDERHANA
+# Audio element ada di iframe yang SAMA, gak perlu cari di parent
 # =====================================================================
-def inject_audio_engine():
+def render_music_player():
+    """Audio player yang sticky & persist. Pakai iframe sendiri."""
+
     if LAGU_B64:
-        lagu_src = f"data:audio/mpeg;base64,{LAGU_B64}"
+        lagu_embed = f'data:audio/mp3;base64,{LAGU_B64}'
         pakai_mp3 = True
     else:
-        lagu_src = ""
+        lagu_embed = ""
         pakai_mp3 = False
 
     html = f"""
-    <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;overflow:hidden;}}</style></head>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        * {{ margin:0; padding:0; box-sizing:border-box; }}
+        body {{
+            background: transparent;
+            font-family: 'Nunito', sans-serif;
+            overflow: hidden;
+        }}
+        #musicUI {{
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        #musicBtn {{
+            background: rgba(255,255,255,0.95);
+            border: 2px solid #ffb3cc;
+            color: #d6336c;
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(214,51,108,0.3);
+            font-family: 'Nunito', sans-serif;
+            transition: transform 0.2s;
+        }}
+        #musicBtn:hover {{ transform: scale(1.06); background:#fff; }}
+
+        #unlockOverlay {{
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 200, 220, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 99998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 18px;
+            cursor: pointer;
+            animation: fadeIn 0.4s ease-out;
+        }}
+        @keyframes fadeIn {{
+            from {{ opacity: 0; }}
+            to {{ opacity: 1; }}
+        }}
+        #unlockOverlay .emoji {{
+            font-size: 80px;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }}
+        @keyframes heartbeat {{
+            0%, 100% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.15); }}
+        }}
+        #unlockOverlay .text {{
+            color: #d6336c;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: center;
+            padding: 0 20px;
+            line-height: 1.5;
+        }}
+        #unlockOverlay .sub {{
+            color: #e0709a;
+            font-size: 13px;
+            font-style: italic;
+        }}
+        #unlockOverlay.hidden {{
+            display: none;
+        }}
+    </style>
+    </head>
     <body>
+
+    <audio id="musicEl" loop preload="auto"></audio>
+
+    <div id="musicUI">
+        <button id="musicBtn">🔊 Musik</button>
+    </div>
+
+    <div id="unlockOverlay">
+        <div class="emoji">🎵</div>
+        <div class="text">
+            Tap di mana saja untuk memulai musik & pengalaman 💕
+        </div>
+        <div class="sub">(browser butuh 1x sentuhan untuk memutar musik)</div>
+    </div>
+
     <script>
         (function() {{
-            const P = window.parent;
-            if (P.__loveInstalled) return;
-            P.__loveInstalled = true;
-
             const PAKAI_MP3 = {str(pakai_mp3).lower()};
-            const LAGU_SRC = "{lagu_src[:100]}...";  // truncated for log
+            const LAGU_DATA = "{lagu_embed}";
 
-            console.log('[love] Installing audio engine. PAKAI_MP3 =', PAKAI_MP3);
+            const audioEl = document.getElementById('musicEl');
+            const btn = document.getElementById('musicBtn');
+            const overlay = document.getElementById('unlockOverlay');
 
-            // ================================================================
-            // 1. BIKIN AUDIO ELEMENT DI PARENT DOCUMENT (bukan di iframe)
-            //    Biar persist & gak ke-reset saat Streamlit rerun
-            // ================================================================
-            let audioEl = P.document.getElementById('loveGlobalMusic');
-            if (!audioEl) {{
-                audioEl = P.document.createElement('audio');
-                audioEl.id = 'loveGlobalMusic';
-                audioEl.loop = true;
-                audioEl.preload = 'auto';
-                audioEl.style.display = 'none';
-                if (PAKAI_MP3) {{
-                    audioEl.src = "data:audio/mpeg;base64,{lagu_src if pakai_mp3 else ''}";
+            let musicEnabled = true;
+            let musicStarted = false;
+            let audioCtx = null;
+            let lastSfxId = null;
+
+            // ============ SET SUMBER LAGU ============
+            if (PAKAI_MP3 && LAGU_DATA) {{
+                audioEl.src = LAGU_DATA;
+                console.log('[love] MP3 source set, length:', LAGU_DATA.length);
+            }} else {{
+                console.log('[love] No MP3, using synth fallback.');
+            }}
+
+            // ============ AUDIO CONTEXT (untuk SFX & synth) ============
+            function getCtx() {{
+                if (!audioCtx) {{
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 }}
-                P.document.body.appendChild(audioEl);
-                console.log('[love] Audio element created in parent.');
+                if (audioCtx.state === 'suspended') {{
+                    audioCtx.resume().catch(()=>{{}});
+                }}
+                return audioCtx;
             }}
 
-            // ================================================================
-            // 2. AUDIO CONTEXT DI PARENT
-            // ================================================================
-            const AudioCtx = P.AudioContext || P.webkitAudioContext;
-            if (!P.__loveCtx) {{
-                P.__loveCtx = new AudioCtx();
-            }}
-
-            P.__musicVolume = 0.6;
-            P.__sfxVolume = 0.7;
-            P.__musicEnabled = true;
-            P.__musicPlaying = false;
-            P.__lastSfxId = null;
-            P.__synthMusicRunning = false;
-            P.__synthMusicTimer = null;
-            P.__audioUnlocked = false;
-
-            // ================================================================
-            // 3. REVERB
-            // ================================================================
+            // ============ REVERB ============
             function makeReverbIR(ctx, duration, decay) {{
                 const rate = ctx.sampleRate;
                 const length = rate * duration;
@@ -324,31 +420,31 @@ def inject_audio_engine():
                 return impulse;
             }}
 
-            if (!P.__loveMaster) {{
-                const reverbIR = makeReverbIR(P.__loveCtx, 4.5, 2.5);
-                const reverb = P.__loveCtx.createConvolver();
-                reverb.buffer = reverbIR;
+            let masterGain = null;
+            let reverbNode = null;
 
-                const reverbGain = P.__loveCtx.createGain();
+            function initReverb() {{
+                if (masterGain) return;
+                const ctx = getCtx();
+                const reverbIR = makeReverbIR(ctx, 4.5, 2.5);
+                reverbNode = ctx.createConvolver();
+                reverbNode.buffer = reverbIR;
+                const reverbGain = ctx.createGain();
                 reverbGain.gain.value = 0.45;
-
-                const masterGain = P.__loveCtx.createGain();
+                masterGain = ctx.createGain();
                 masterGain.gain.value = 0.7;
-
-                reverb.connect(reverbGain);
+                reverbNode.connect(reverbGain);
                 reverbGain.connect(masterGain);
-                masterGain.connect(P.__loveCtx.destination);
-
-                P.__loveMaster = masterGain;
-                P.__loveReverb = reverb;
+                masterGain.connect(ctx.destination);
             }}
 
-            // ================================================================
-            // 4. PIANO SYNTH (untuk SFX & fallback musik)
-            // ================================================================
+            // ============ PIANO SYNTH (untuk SFX & fallback musik) ============
+            const SFX_VOLUME = 0.7;
+            const MUSIC_VOLUME = 0.55;
+
             function playPiano(freq, startTime, duration, volume) {{
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{{}});
+                const ctx = getCtx();
+                initReverb();
 
                 const harmonics = [
                     {{ mult: 1, gain: 1.0,  type: 'sine' }},
@@ -375,21 +471,19 @@ def inject_audio_engine():
                     const dryGain = ctx.createGain();
                     dryGain.gain.value = 0.55;
                     g.connect(dryGain);
-                    dryGain.connect(P.__loveMaster);
+                    dryGain.connect(masterGain);
 
                     const wetGain = ctx.createGain();
                     wetGain.gain.value = 0.55;
                     g.connect(wetGain);
-                    wetGain.connect(P.__loveReverb);
+                    wetGain.connect(reverbNode);
 
                     o.start(startTime);
                     o.stop(startTime + duration + 0.1);
                 }});
             }}
 
-            // ================================================================
-            // 5. SYNTH MUSIC FALLBACK
-            // ================================================================
+            // ============ FALLBACK: SYNTH MUSIC ============
             const bassLine = [130.81, 164.81, 174.61, 196.00];
             const arpChords = [
                 [261.63, 329.63, 392.00, 493.88],
@@ -404,11 +498,14 @@ def inject_audio_engine():
                 [587.33, 659.25, 587.33, 523.25],
             ];
             let synthStep = 0;
+            let synthRunning = false;
+            let synthTimer = null;
 
             function playMeasure(atTime) {{
-                const vol = P.__musicVolume;
+                const vol = MUSIC_VOLUME;
                 const barIdx = synthStep % 4;
                 const baseTime = atTime;
+
                 playPiano(bassLine[barIdx], baseTime, 4.2, 0.30 * vol);
                 const arp = arpChords[barIdx];
                 for (let i = 0; i < arp.length; i++) {{
@@ -423,50 +520,72 @@ def inject_audio_engine():
                 synthStep++;
             }}
 
-            function startSynthMusic() {{
-                if (P.__synthMusicRunning) return;
-                P.__synthMusicRunning = true;
+            function startSynth() {{
+                if (synthRunning) return;
+                synthRunning = true;
                 function loop() {{
-                    if (!P.__synthMusicRunning || !P.__musicEnabled) return;
-                    const now = P.__loveCtx.currentTime + 0.05;
-                    playMeasure(now);
-                    P.__synthMusicTimer = setTimeout(loop, 3400);
+                    if (!synthRunning || !musicEnabled) return;
+                    const ctx = getCtx();
+                    playMeasure(ctx.currentTime + 0.05);
+                    synthTimer = setTimeout(loop, 3400);
                 }}
                 loop();
             }}
 
-            function stopSynthMusic() {{
-                P.__synthMusicRunning = false;
-                if (P.__synthMusicTimer) {{
-                    clearTimeout(P.__synthMusicTimer);
-                    P.__synthMusicTimer = null;
-                }}
+            function stopSynth() {{
+                synthRunning = false;
+                if (synthTimer) {{ clearTimeout(synthTimer); synthTimer = null; }}
             }}
 
-            // ================================================================
-            // 6. PLAY MUSIC (MP3 atau synth)
-            // ================================================================
-            function tryPlayMusic() {{
-                if (!P.__musicEnabled) return;
-                if (P.__musicPlaying) return;
+            // ============ SFX ============
+            function sfxPop() {{
+                const now = getCtx().currentTime;
+                playPiano(880, now, 1.0, 0.45 * SFX_VOLUME);
+                playPiano(1318.51, now + 0.08, 1.1, 0.35 * SFX_VOLUME);
+            }}
+            function sfxDing() {{
+                const now = getCtx().currentTime;
+                [1174.66, 1479.98, 1760.00].forEach((f, i) => {{
+                    playPiano(f, now + i * 0.07, 1.4, 0.30 * SFX_VOLUME);
+                }});
+            }}
+            function sfxChime() {{
+                const now = getCtx().currentTime;
+                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {{
+                    playPiano(f, now + i * 0.12, 2.0, 0.28 * SFX_VOLUME);
+                }});
+            }}
+            function sfxReset() {{
+                const now = getCtx().currentTime;
+                [880, 659.25, 440].forEach((f, i) => {{
+                    playPiano(f, now + i * 0.1, 1.0, 0.30 * SFX_VOLUME);
+                }});
+            }}
 
-                if (PAKAI_MP3 && audioEl && audioEl.src) {{
-                    audioEl.volume = 0.35;
+            // ============ PLAY MUSIC ============
+            function tryPlayMusic() {{
+                if (!musicEnabled) return;
+
+                if (PAKAI_MP3 && audioEl.src) {{
+                    audioEl.volume = 0.4;
                     const p = audioEl.play();
                     if (p && p.then) {{
                         p.then(() => {{
-                            P.__musicPlaying = true;
-                            console.log('[love] ✅ MP3 music playing.');
+                            musicStarted = true;
+                            console.log('[love] ✅ MP3 playing');
+                            hideOverlay();
                         }}).catch(err => {{
-                            console.warn('[love] MP3 blocked:', err.name, '- will retry on next interaction');
-                            // JANGAN fallback ke synth kalau MP3 ada, cuma belum diizinkan
+                            console.warn('[love] MP3 blocked:', err.name);
+                            // Overlay tetap tampil, tunggu tap
                         }});
                     }}
                 }} else {{
-                    // Fallback: synth music
-                    startSynthMusic();
-                    P.__musicPlaying = true;
-                    console.log('[love] ✅ Synth music playing (no MP3).');
+                    // Fallback synth
+                    getCtx();
+                    startSynth();
+                    musicStarted = true;
+                    hideOverlay();
+                    console.log('[love] ✅ Synth playing (no MP3)');
                 }}
             }}
 
@@ -474,169 +593,128 @@ def inject_audio_engine():
                 if (audioEl) {{
                     try {{ audioEl.pause(); }} catch(e) {{}}
                 }}
-                stopSynthMusic();
-                P.__musicPlaying = false;
+                stopSynth();
+                musicStarted = false;
             }}
 
-            // ================================================================
-            // 7. AUDIO UNLOCK — kunci agar browser izinkan audio
-            // ================================================================
-            function unlockAudio() {{
-                if (P.__audioUnlocked) return;
-
-                // Resume AudioContext
-                if (P.__loveCtx.state === 'suspended') {{
-                    P.__loveCtx.resume().catch(()=>{{}});
+            // ============ OVERLAY ============
+            function hideOverlay() {{
+                if (overlay) {{
+                    overlay.classList.add('hidden');
                 }}
-
-                // Putar suara silent super pendek untuk "unlock" audio
-                try {{
-                    const buffer = P.__loveCtx.createBuffer(1, 1, 22050);
-                    const src = P.__loveCtx.createBufferSource();
-                    src.buffer = buffer;
-                    src.connect(P.__loveCtx.destination);
-                    src.start(0);
-                }} catch(e) {{}}
-
-                // Coba mainkan MP3 di sini juga
-                if (PAKAI_MP3 && audioEl && audioEl.src) {{
-                    audioEl.volume = 0.35;
-                    audioEl.play().then(() => {{
-                        P.__musicPlaying = true;
-                        console.log('[love] ✅ MP3 started after unlock.');
-                    }}).catch(e => {{
-                        console.log('[love] Unlock play failed:', e.name);
-                    }});
-                }}
-
-                P.__audioUnlocked = true;
-                console.log('[love] Audio unlocked.');
             }}
 
-            // ================================================================
-            // 8. API UNTUK STREAMLIT
-            // ================================================================
-            P.__loveStartMusicIfNeeded = function() {{
+            // ============ UNLOCK AUDIO ============
+            function unlockAndPlay() {{
+                getCtx();
                 tryPlayMusic();
-            }};
+            }}
 
-            P.__loveToggleMusic = function() {{
-                if (P.__musicEnabled) {{
-                    P.__musicEnabled = false;
+            // Overlay: tap untuk unlock
+            if (overlay) {{
+                overlay.addEventListener('click', (e) => {{
+                    e.stopPropagation();
+                    unlockAndPlay();
+                }});
+                overlay.addEventListener('touchstart', (e) => {{
+                    e.stopPropagation();
+                    unlockAndPlay();
+                }});
+            }}
+
+            // Fallback: coba autoplay langsung
+            setTimeout(() => {{
+                tryPlayMusic();
+            }}, 500);
+
+            // ============ TOMBOL MUSIK TOGGLE ============
+            btn.addEventListener('click', (e) => {{
+                e.stopPropagation();
+                musicEnabled = !musicEnabled;
+                if (musicEnabled) {{
+                    btn.textContent = '🔊 Musik';
+                    unlockAndPlay();
+                }} else {{
+                    btn.textContent = '🔇 Musik';
                     stopMusic();
-                }} else {{
-                    P.__musicEnabled = true;
-                    tryPlayMusic();
                 }}
-                return P.__musicEnabled;
-            }};
+            }});
 
-            P.__loveMusicEnabled = function() {{ return P.__musicEnabled; }};
+            // ============ TERIMA TRIGGER DARI STREAMLIT ============
+            // Karena audio element & ctx ada di iframe yang SAMA,
+            // kita pakai postMessage listener untuk terima perintah
+            window.addEventListener('message', (e) => {{
+                const data = e.data;
+                if (!data) return;
 
-            // ================================================================
-            // 9. SFX (pakai piano synth)
-            // ================================================================
-            function sfxPop() {{
-                const now = P.__loveCtx.currentTime;
-                playPiano(880, now, 1.0, 0.45 * P.__sfxVolume);
-                playPiano(1318.51, now + 0.08, 1.1, 0.35 * P.__sfxVolume);
-            }}
-            function sfxDing() {{
-                const now = P.__loveCtx.currentTime;
-                [1174.66, 1479.98, 1760.00].forEach((f, i) => {{
-                    playPiano(f, now + i * 0.07, 1.4, 0.30 * P.__sfxVolume);
-                }});
-            }}
-            function sfxChime() {{
-                const now = P.__loveCtx.currentTime;
-                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {{
-                    playPiano(f, now + i * 0.12, 2.0, 0.28 * P.__sfxVolume);
-                }});
-            }}
-            function sfxReset() {{
-                const now = P.__loveCtx.currentTime;
-                [880, 659.25, 440].forEach((f, i) => {{
-                    playPiano(f, now + i * 0.1, 1.0, 0.30 * P.__sfxVolume);
-                }});
-            }}
+                if (data.__loveSfx) {{
+                    if (data.__loveSfxId !== undefined && data.__loveSfxId === lastSfxId) return;
+                    lastSfxId = data.__loveSfxId;
 
-            P.__lovePlaySfx = function(name, id) {{
-                if (id !== undefined && id === P.__lastSfxId) return;
-                P.__lastSfxId = id;
-
-                // PASTIKAN audio unlocked setiap kali SFX dipanggil
-                unlockAudio();
-
-                if (P.__loveCtx.state === 'suspended') {{
-                    P.__loveCtx.resume().then(() => fireSfx(name)).catch(() => fireSfx(name));
-                }} else {{
-                    fireSfx(name);
-                }}
-            }};
-
-            function fireSfx(name) {{
-                try {{
+                    getCtx();
+                    const name = data.__loveSfx;
                     if (name === 'pop') sfxPop();
                     else if (name === 'ding') sfxDing();
                     else if (name === 'chime') sfxChime();
                     else if (name === 'reset') sfxReset();
-                }} catch(e) {{ console.error('[love] SFX error:', e); }}
-            }}
-
-            // Listen postMessage (fallback)
-            P.addEventListener('message', function(ev) {{
-                const data = ev.data;
-                if (data && data.__loveSfx) {{
-                    unlockAudio();
-                    P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
                 }}
-                if (data && data.__loveFireworks && typeof P.__loveFireworksFullScreen === 'function') {{
-                    P.__loveFireworksFullScreen();
+
+                if (data.__loveToggleMusic !== undefined) {{
+                    musicEnabled = data.__loveToggleMusic;
+                    if (musicEnabled) unlockAndPlay();
+                    else stopMusic();
+                }}
+
+                if (data.__loveQuery === true) {{
+                    // kirim status balik
+                    try {{
+                        window.parent.postMessage({{
+                            __loveStatus: true,
+                            musicEnabled: musicEnabled,
+                            musicStarted: musicStarted,
+                            pakaiMp3: PAKAI_MP3
+                        }}, '*');
+                    }} catch(e) {{}}
                 }}
             }});
 
-            // ================================================================
-            // 10. AUTO-START MUSIC
-            // Kunci: coba play berkali-kali di setiap event interaksi
-            // ================================================================
-            // Coba langsung (kadang berhasil kalau user udah pernah interaksi)
-            tryPlayMusic();
+            // Sinyal siap
+            try {{
+                window.parent.postMessage({{ __loveReady: true, pakaiMp3: PAKAI_MP3 }}, '*');
+            }} catch(e) {{}}
 
-            // Setiap interaksi user → coba unlock + play music
-            const evList = ['click','keydown','touchstart','mousedown','pointerdown','scroll','mousemove'];
-            evList.forEach(ev => {{
-                P.document.addEventListener(ev, function() {{
-                    unlockAudio();
-                    if (!P.__musicPlaying) tryPlayMusic();
-                }}, {{ capture: true, passive: true }});
-                // Listener juga di dalam iframe
-                document.addEventListener(ev, function() {{
-                    unlockAudio();
-                    if (!P.__musicPlaying) tryPlayMusic();
-                }}, {{ capture: true, passive: true }});
-            }});
+            console.log('[love] Player ready. PAKAI_MP3 =', PAKAI_MP3);
+        }})();
+    </script>
+    </body>
+    </html>
+    """
 
-            // Retry periodik: coba play tiap 1 detik sampai berhasil (max 30 detik)
-            let retryCount = 0;
-            const retryInterval = setInterval(() => {{
-                retryCount++;
-                if (P.__musicPlaying) {{
-                    clearInterval(retryInterval);
-                    return;
-                }}
-                if (retryCount > 30) {{
-                    clearInterval(retryInterval);
-                    console.log('[love] Give up auto-play after 30s. Waiting for user interaction.');
-                    return;
-                }}
-                if (P.__loveCtx.state === 'running') {{
-                    tryPlayMusic();
-                }} else {{
-                    P.__loveCtx.resume().catch(()=>{{}});
-                }}
-            }}, 1000);
+    # Pakai st.components.v1.html dengan tinggi kecil (buat tombol musik saja)
+    components.html(html, height=70, scrolling=False)
 
-            console.log('[love] Audio engine ready. Waiting for user interaction or auto-play success.');
+
+# =====================================================================
+# TRIGGER SFX — pakai IFRAME TERPISAH
+# =====================================================================
+def trigger_sfx(sfx_name: str, sfx_id: int):
+    if not sfx_name:
+        return
+    html = f"""
+    <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;}}</style></head>
+    <body>
+    <script>
+        (function() {{
+            const msg = {{ __loveSfx: '{sfx_name}', __loveSfxId: {sfx_id} }};
+            // Kirim ke SEMUA iframe (biar audio player yang dapet)
+            window.parent.postMessage(msg, '*');
+
+            // Juga ke window parent sendiri (kalau player ada di parent)
+            try {{
+                if (window.parent.__lovePlaySfx) {{
+                    window.parent.__lovePlaySfx('{sfx_name}', {sfx_id});
+                }}
+            }} catch(e) {{}}
         }})();
     </script>
     </body></html>
@@ -644,8 +722,24 @@ def inject_audio_engine():
     components.html(html, height=0)
 
 
+def trigger_fireworks():
+    html = """
+    <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;}</style></head>
+    <body>
+    <script>
+        (function() {
+            try {
+                window.parent.postMessage({ __loveFireworks: true }, '*');
+            } catch(e) {}
+        })();
+    </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
 # =====================================================================
-# EFEK GLOBAL
+# EFEK GLOBAL: Fireworks + Petal + Sparkle
 # =====================================================================
 def inject_global_effects():
     html = """
@@ -742,467 +836,4 @@ def inject_global_effects():
 
             P.__loveFireworksFullScreen = function() {
                 const existing = P.document.getElementById('love-fw-canvas');
-                if (existing) existing.remove();
-
-                const fw = P.document.createElement('canvas');
-                fw.id = 'love-fw-canvas';
-                fw.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9998;';
-                fw.width = P.innerWidth;
-                fw.height = P.innerHeight;
-                P.document.body.appendChild(fw);
-
-                const ctx = fw.getContext('2d');
-                const particles = [];
-                const colors = ['#ff7fae','#d6336c','#ffb3cc','#ffd9a0','#ffe8b0','#ffffff','#f9a8c9','#e8879f'];
-
-                function createFirework(x, y) {
-                    const count = 60 + Math.floor(Math.random() * 30);
-                    const baseHue = colors[Math.floor(Math.random() * colors.length)];
-                    for (let i = 0; i < count; i++) {
-                        const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
-                        const speed = Math.random() * 6 + 2;
-                        particles.push({
-                            x, y,
-                            vx: Math.cos(angle) * speed,
-                            vy: Math.sin(angle) * speed,
-                            life: 1,
-                            decay: 0.010 + Math.random() * 0.008,
-                            color: Math.random() < 0.7 ? baseHue : colors[Math.floor(Math.random()*colors.length)],
-                            size: Math.random() * 2.8 + 1.8
-                        });
-                    }
-                }
-
-                let active = true;
-                function animate() {
-                    ctx.fillStyle = 'rgba(255, 233, 240, 0.14)';
-                    ctx.fillRect(0, 0, fw.width, fw.height);
-                    for (let i = particles.length - 1; i >= 0; i--) {
-                        const p = particles[i];
-                        p.x += p.vx; p.y += p.vy;
-                        p.vy += 0.045;
-                        p.vx *= 0.985; p.vy *= 0.985;
-                        p.life -= p.decay;
-                        if (p.life <= 0) { particles.splice(i, 1); continue; }
-                        ctx.globalAlpha = Math.max(p.life, 0);
-                        ctx.fillStyle = p.color;
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                    ctx.globalAlpha = 1;
-                    if (active || particles.length > 0) {
-                        requestAnimationFrame(animate);
-                    } else {
-                        fw.remove();
-                    }
-                }
-                animate();
-
-                const start = Date.now();
-                const interval = setInterval(() => {
-                    if (Date.now() - start > 12000) {
-                        clearInterval(interval);
-                        active = false;
-                        return;
-                    }
-                    createFirework(
-                        Math.random() * fw.width,
-                        Math.random() * fw.height * 0.7 + 50
-                    );
-                }, 400);
-
-                setTimeout(() => createFirework(fw.width * 0.5, fw.height * 0.3), 200);
-                setTimeout(() => createFirework(fw.width * 0.25, fw.height * 0.45), 500);
-                setTimeout(() => createFirework(fw.width * 0.75, fw.height * 0.4), 800);
-            };
-        })();
-    </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-# =====================================================================
-# TRIGGER SFX
-# =====================================================================
-def trigger_sfx(sfx_name: str, sfx_id: int):
-    if not sfx_name:
-        return
-    html = f"""
-    <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;}}</style></head>
-    <body>
-    <script>
-        (function() {{
-            const id = {sfx_id};
-            const name = '{sfx_name}';
-            const P = window.parent;
-
-            function fire() {{
-                if (typeof P.__lovePlaySfx === 'function') {{
-                    P.__lovePlaySfx(name, id);
-                    return true;
-                }}
-                return false;
-            }}
-
-            if (!fire()) {{
-                let tries = 0;
-                const iv = setInterval(() => {{
-                    tries++;
-                    if (fire() || tries > 10) clearInterval(iv);
-                }}, 40);
-            }}
-
-            try {{
-                P.postMessage({{ __loveSfx: name, __loveSfxId: id }}, '*');
-            }} catch(e) {{}}
-        }})();
-    </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-def trigger_fireworks():
-    html = """
-    <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;}</style></head>
-    <body>
-    <script>
-        (function() {
-            const P = window.parent;
-            if (typeof P.__loveFireworksFullScreen === 'function') {
-                P.__loveFireworksFullScreen();
-            } else {
-                try { P.postMessage({ __loveFireworks: true }, '*'); } catch(e) {}
-            }
-        })();
-    </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-# ================== TOMBOL MUSIK ==================
-def render_music_toggle():
-    html = """
-    <!DOCTYPE html><html><head>
-    <style>
-        body { margin:0; padding:0; background:transparent; overflow:hidden; }
-        #musicToggle {
-            position: fixed;
-            top: 12px; right: 12px;
-            background: rgba(255,255,255,0.95);
-            border: 2px solid #ffb3cc;
-            color: #d6336c;
-            border-radius: 999px;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 14px rgba(214,51,108,0.3);
-            z-index: 10000;
-            font-family: 'Nunito', sans-serif;
-            transition: transform 0.2s;
-        }
-        #musicToggle:hover { transform: scale(1.06); background:#fff; }
-    </style>
-    </head>
-    <body>
-    <button id="musicToggle">🔊 Musik</button>
-    <script>
-        const btn = document.getElementById('musicToggle');
-        const P = window.parent;
-        function refresh() {
-            if (typeof P.__loveMusicEnabled === 'function') {
-                btn.textContent = P.__loveMusicEnabled() ? '🔊 Musik' : '🔇 Musik';
-            }
-        }
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (typeof P.__loveToggleMusic === 'function') {
-                P.__loveToggleMusic();
-                setTimeout(refresh, 100);
-            }
-        });
-        setInterval(refresh, 1000);
-        refresh();
-    </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-# ================== PASANG SEMUA ==================
-inject_audio_engine()
-inject_global_effects()
-render_music_toggle()
-
-if st.session_state.sfx:
-    trigger_sfx(st.session_state.sfx, st.session_state.sfx_id)
-    st.session_state.sfx = ""
-
-
-# ================== HALAMAN 0: AWAL ==================
-if st.session_state.step == 0:
-    st.markdown('<div class="judul">Hai, kamu 🌸</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="subjudul">aku nitipin sesuatu di kotak ini. '
-        'buka pelan-pelan ya, jangan sekaligus.</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        '<div class="box-wrap"><div class="box">🎁</div></div>',
-        unsafe_allow_html=True
-    )
-
-    if st.button("Buka kotaknya 💌"):
-        st.session_state.step = 1
-        ambil_pesan_baru()
-        st.session_state.sfx = "pop"
-        st.session_state.sfx_id += 1
-        st.rerun()
-
-
-# ================== HALAMAN 1: BUKA KOTAK ==================
-elif st.session_state.step == 1:
-    st.markdown('<div class="judul">Sebuah pesan untukmu</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        f'<div class="pesan-card" key="p{st.session_state.key_pesan}">'
-        f'{st.session_state.pesan_sekarang}</div>',
-        unsafe_allow_html=True
-    )
-
-    sisa = len(st.session_state.sisa_pesan)
-    total = len(kata_nugas)
-    sudah = total - sisa
-
-    st.markdown(
-        f'<div class="counter">kotak yang sudah kamu buka — {sudah} dari {total} 🌸</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    if sisa > 0:
-        if st.button("Lanjut, buka kotak berikutnya 🌷"):
-            ambil_pesan_baru()
-            st.session_state.sfx = "ding"
-            st.session_state.sfx_id += 1
-            st.rerun()
-    else:
-        st.markdown(
-            '<div class="counter">kotaknya sudah habis... '
-            'tapi masih ada satu hal lagi untukmu</div>',
-            unsafe_allow_html=True
-        )
-        if st.button("Buka yang terakhir ✨"):
-            st.session_state.step = 99
-            st.session_state.sfx = "chime"
-            st.session_state.sfx_id += 1
-            st.rerun()
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 Ulang dari awal"):
-        reset_semua()
-        st.session_state.sfx = "reset"
-        st.session_state.sfx_id += 1
-        st.rerun()
-
-
-# ================== HALAMAN 99: SURPRISE ==================
-elif st.session_state.step == 99:
-
-    trigger_fireworks()
-
-    if FOTO_B64:
-        foto_html = f'''
-        <div class="foto-frame">
-            <div class="foto-inner">
-                <img src="data:image/jpeg;base64,{FOTO_B64}" alt="Kita berdua" />
-            </div>
-            <div class="foto-caption">kita, dan semua momen kecil ini 💕</div>
-        </div>
-        '''
-    else:
-        foto_html = '''
-        <div class="foto-frame foto-placeholder">
-            <div class="foto-inner">
-                <div style="display:flex;align-items:center;justify-content:center;
-                            height:100%;color:#d6336c;font-size:0.9em;
-                            text-align:center;padding:20px;">
-                    (taruh foto kalian di<br>assets/foto.jpg ya 💕)
-                </div>
-            </div>
-        </div>
-        '''
-
-    html_surprise = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Nunito:wght@400;600;700&display=swap');
-        html, body {{ margin:0; padding:0; background:transparent; font-family:'Nunito',sans-serif; overflow:hidden; }}
-
-        .konten {{
-            position:relative; z-index:3;
-            background:rgba(255,255,255,0.96);
-            border-radius:26px;
-            padding:36px 30px 30px 30px;
-            margin:16px auto;
-            max-width:640px;
-            box-shadow:0 22px 55px rgba(214,51,108,0.28),
-                       0 0 0 3px rgba(255,179,204,0.55);
-            text-align:center;
-            animation:popIn 1.1s cubic-bezier(0.22,1,0.36,1);
-        }}
-        @keyframes popIn {{
-            0% {{ opacity:0; transform:scale(0.82) translateY(20px); filter:blur(6px); }}
-            60% {{ filter:blur(0); }}
-            100% {{ opacity:1; transform:scale(1) translateY(0); }}
-        }}
-
-        .foto-frame {{
-            display: inline-block;
-            background: #fff;
-            padding: 14px 14px 50px 14px;
-            border-radius: 4px;
-            box-shadow:
-                0 14px 38px rgba(214, 51, 108, 0.32),
-                0 4px 10px rgba(0,0,0,0.08),
-                inset 0 0 0 1px rgba(255, 179, 204, 0.5);
-            transform: rotate(-2.2deg);
-            margin: 8px auto 24px auto;
-            position: relative;
-            transition: transform 0.4s ease;
-            animation: fotoIn 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
-        }}
-        .foto-frame:hover {{ transform: rotate(0deg) scale(1.03); }}
-
-        @keyframes fotoIn {{
-            0% {{ opacity:0; transform: rotate(-8deg) scale(0.7) translateY(30px); }}
-            100% {{ opacity:1; transform: rotate(-2.2deg) scale(1) translateY(0); }}
-        }}
-
-        .foto-frame::before {{
-            content: "";
-            position: absolute;
-            top: -12px; left: 50%;
-            transform: translateX(-50%) rotate(-3deg);
-            width: 90px; height: 26px;
-            background: linear-gradient(135deg, rgba(255,179,204,0.85), rgba(255,143,187,0.85));
-            border-radius: 2px;
-            box-shadow: 0 2px 6px rgba(214,51,108,0.25);
-            opacity: 0.92;
-        }}
-
-        .foto-inner {{
-            width: 260px; height: 260px;
-            overflow: hidden;
-            background: #ffe9f0;
-            border-radius: 2px;
-            position: relative;
-        }}
-        .foto-inner img {{
-            width: 100%; height: 100%;
-            object-fit: cover;
-            display: block;
-            filter: saturate(1.05) contrast(1.02) brightness(1.03);
-        }}
-
-        .foto-caption {{
-            position: absolute;
-            bottom: 12px; left: 0; right: 0;
-            text-align: center;
-            font-family: 'Caveat', cursive;
-            font-size: 1.25em;
-            color: #d6336c;
-            letter-spacing: 0.3px;
-        }}
-
-        .foto-frame::after {{
-            content: "💕";
-            position: absolute;
-            bottom: 14px; right: 16px;
-            font-size: 18px;
-            opacity: 0.85;
-            animation: heartbeat 2s ease-in-out infinite;
-        }}
-
-        @keyframes heartbeat {{
-            0%, 100% {{ transform: scale(1); }}
-            50% {{ transform: scale(1.18); }}
-        }}
-
-        .judul-surprise {{
-            font-family:'Caveat', cursive;
-            font-size:2.4em;
-            color:#d6336c;
-            margin-bottom:6px;
-            letter-spacing:0.5px;
-            animation:heartbeat 2.4s ease-in-out infinite;
-        }}
-
-        .garis {{
-            width:60px; height:3px;
-            background:linear-gradient(90deg, transparent, #ff7fae, transparent);
-            margin:14px auto 22px auto;
-            border-radius:3px;
-            animation:fadeIn 1.6s ease-out;
-        }}
-        @keyframes fadeIn {{ from {{ opacity:0; width:0; }} to {{ opacity:1; width:60px; }} }}
-
-        .paragraf {{
-            color:#a1255a;
-            font-size:1.04em;
-            line-height:1.9;
-            text-align:left;
-            font-weight:500;
-            opacity:0;
-            animation:fadeUp 1.4s ease-out 1.2s forwards;
-        }}
-        @keyframes fadeUp {{
-            from {{ opacity:0; transform:translateY(14px); }}
-            to {{ opacity:1; transform:translateY(0); }}
-        }}
-        .ttd {{
-            margin-top:24px;
-            color:#d6336c;
-            font-family:'Caveat', cursive;
-            font-size:1.5em;
-            text-align:right;
-            opacity:0;
-            animation:fadeUp 1.4s ease-out 2.2s forwards;
-        }}
-    </style>
-    </head>
-    <body>
-    <div class="konten">
-        <div class="judul-surprise">Untuk kamu 🌸</div>
-        <div class="garis"></div>
-        {foto_html}
-        <div class="paragraf">{kalimat_penutup}</div>
-        <div class="ttd">— dari aku, yang sayang banget sama kamu</div>
-    </div>
-    </body>
-    </html>
-    """
-
-    components.html(html_surprise, height=900, scrolling=False)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 Ulang dari awal ya"):
-        reset_semua()
-        st.session_state.sfx = "reset"
-        st.session_state.sfx_id += 1
-        st.rerun()
-
-
-# ================== FOOTER ==================
-st.markdown(
-    '<div class="footer">dibuat sambil mikirin kamu terus</div>',
-    unsafe_allow_html=True
-)
+                if (existing
