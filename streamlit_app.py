@@ -200,7 +200,6 @@ if "sisa_pesan" not in st.session_state:
 if "key_pesan" not in st.session_state:
     st.session_state.key_pesan = 0
 
-# SFX trigger: pop / ding / chime / reset / (kosong)
 if "sfx" not in st.session_state:
     st.session_state.sfx = ""
 
@@ -222,255 +221,292 @@ def reset_semua():
     st.session_state.sisa_pesan = pool
 
 
-# ================== AUDIO + SFX + MUSIC (single iframe) ==================
-def render_audio_player(sfx_to_play: str = ""):
+# ================== AUDIO ENGINE (nempel di window.parent, anti-rerun) ==================
+def inject_audio_engine():
     """
-    Satu iframe yang berisi:
-      - Background music (Web Audio API, loop chord romantis)
-      - SFX engine
-      - Auto play SFX sesuai nilai sfx_to_play
-      - Toggle button musik
+    Script ini dipasang SEKALI di window.parent (bukan iframe).
+    Karena nempel di parent, dia gak kehapus walau Streamlit rerun.
     """
+    html = """
+    <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;overflow:hidden;}</style></head>
+    <body>
+    <script>
+        (function() {
+            const P = window.parent;
+
+            // Kalau audio engine udah pernah dipasang di parent, skip
+            if (P.__loveAudioInstalled) {
+                return;
+            }
+            P.__loveAudioInstalled = true;
+
+            // ============ AUDIO CONTEXT DI PARENT ============
+            const AudioCtx = P.AudioContext || P.webkitAudioContext;
+            P.__loveCtx = new AudioCtx();
+
+            // Volume master
+            P.__musicVolume = 0.9;   // <== musik lebih keras (0-1)
+            P.__sfxVolume = 0.55;
+
+            // State musik
+            P.__musicRunning = false;
+            P.__musicTimer = null;
+            P.__musicEnabled = true;
+            P.__chordIdx = 0;
+
+            // ============ HELPER: main nada ============
+            function playNote(freq, startTime, duration, volume, type) {
+                const ctx = P.__loveCtx;
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = type || 'sine';
+                o.frequency.value = freq;
+                g.gain.setValueAtTime(0.0001, startTime);
+                g.gain.exponentialRampToValueAtTime(volume, startTime + 0.06);
+                g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+                o.connect(g);
+                g.connect(ctx.destination);
+                o.start(startTime);
+                o.stop(startTime + duration + 0.15);
+            }
+
+            // ============ MUSIK ============
+            // progresi romantis: C - Am - F - G (2 oktaf lebih rendah dari C4)
+            const chordRoots = [261.63, 220.00, 174.61, 196.00];
+
+            function playRomanticChord(rootFreq, atTime) {
+                const dur = 4.2;
+                // chord: root, 3rd, 5th, 7th, 9th
+                const intervals = [1, 1.25, 1.5, 1.875, 2.25];
+                const baseVol = P.__musicVolume;
+                intervals.forEach((ratio, i) => {
+                    const vol = (i === 0 ? 0.09 : (0.065 - i * 0.008)) * baseVol;
+                    playNote(rootFreq * ratio, atTime + i * 0.1, dur, Math.max(vol, 0.02), 'sine');
+                });
+                // melodi tinggi tipis
+                playNote(rootFreq * 2, atTime + 0.3, dur * 0.75, 0.045 * baseVol, 'triangle');
+                playNote(rootFreq * 3, atTime + 0.6, dur * 0.5, 0.025 * baseVol, 'sine');
+            }
+
+            function startMusicLoop() {
+                if (!P.__musicEnabled || P.__musicRunning) return;
+                P.__musicRunning = true;
+
+                function loop() {
+                    if (!P.__musicRunning || !P.__musicEnabled) return;
+                    playRomanticChord(chordRoots[P.__chordIdx], P.__loveCtx.currentTime + 0.05);
+                    P.__chordIdx = (P.__chordIdx + 1) % chordRoots.length;
+                    P.__musicTimer = setTimeout(loop, 4100);
+                }
+                loop();
+            }
+
+            function stopMusicLoop() {
+                P.__musicRunning = false;
+                if (P.__musicTimer) { clearTimeout(P.__musicTimer); P.__musicTimer = null; }
+            }
+
+            // ============ SFX ============
+            function sfxPop() {
+                const ctx = P.__loveCtx;
+                const now = ctx.currentTime;
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'sine';
+                o.frequency.setValueAtTime(400, now);
+                o.frequency.exponentialRampToValueAtTime(1000, now + 0.18);
+                g.gain.setValueAtTime(0.0001, now);
+                g.gain.exponentialRampToValueAtTime(0.45 * P.__sfxVolume, now + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+                o.connect(g); g.connect(ctx.destination);
+                o.start(now); o.stop(now + 0.55);
+            }
+
+            function sfxDing() {
+                const ctx = P.__loveCtx;
+                const now = ctx.currentTime;
+                [880, 1318.5].forEach((f, i) => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = 'sine';
+                    o.frequency.value = f;
+                    const t = now + i * 0.09;
+                    g.gain.setValueAtTime(0.0001, t);
+                    g.gain.exponentialRampToValueAtTime(0.32 * P.__sfxVolume, t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(t); o.stop(t + 0.8);
+                });
+            }
+
+            function sfxChime() {
+                const ctx = P.__loveCtx;
+                const now = ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = 'sine';
+                    o.frequency.value = f;
+                    const t = now + i * 0.13;
+                    g.gain.setValueAtTime(0.0001, t);
+                    g.gain.exponentialRampToValueAtTime(0.30 * P.__sfxVolume, t + 0.03);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.35);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(t); o.stop(t + 1.4);
+                });
+            }
+
+            function sfxReset() {
+                const ctx = P.__loveCtx;
+                const now = ctx.currentTime;
+                [660, 440].forEach((f, i) => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = 'sine';
+                    o.frequency.value = f;
+                    const t = now + i * 0.1;
+                    g.gain.setValueAtTime(0.0001, t);
+                    g.gain.exponentialRampToValueAtTime(0.22 * P.__sfxVolume, t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+                    o.connect(g); g.connect(ctx.destination);
+                    o.start(t); o.stop(t + 0.5);
+                });
+            }
+
+            // ============ UNLOCK AUDIO ============
+            function ensureRunning() {
+                if (P.__loveCtx.state === 'suspended') {
+                    P.__loveCtx.resume();
+                }
+            }
+
+            function unlock() {
+                ensureRunning();
+                setTimeout(() => {
+                    if (P.__loveCtx.state === 'running') {
+                        startMusicLoop();
+                    }
+                }, 60);
+            }
+
+            // Listener di parent document
+            ['click', 'keydown', 'touchstart'].forEach(ev => {
+                P.document.addEventListener(ev, unlock, { capture: true });
+            });
+
+            // ============ API BUAT DIPANGGIL DARI IFRAME STREAMLIT ============
+            P.__lovePlaySfx = function(name) {
+                ensureRunning();
+                if (name === 'pop') sfxPop();
+                else if (name === 'ding') sfxDing();
+                else if (name === 'chime') sfxChime();
+                else if (name === 'reset') sfxReset();
+            };
+
+            P.__loveToggleMusic = function() {
+                P.__musicEnabled = !P.__musicEnabled;
+                if (P.__musicEnabled) {
+                    ensureRunning();
+                    startMusicLoop();
+                } else {
+                    stopMusicLoop();
+                }
+                return P.__musicEnabled;
+            };
+
+            P.__loveMusicEnabled = function() {
+                return P.__musicEnabled;
+            };
+        })();
+    </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
+# ================== TRIGGER SFX ==================
+def trigger_sfx(sfx_name: str):
+    """Panggil SFX dari parent. Dijalankan tiap rerun."""
+    if not sfx_name:
+        return
     html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
+    <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;}}</style></head>
+    <body>
+    <script>
+        (function() {{
+            const P = window.parent;
+            if (typeof P.__lovePlaySfx === 'function') {{
+                P.__lovePlaySfx('{sfx_name}');
+            }}
+        }})();
+    </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
+# ================== TOMBOL MUSIK (fixed di kanan atas) ==================
+def render_music_toggle():
+    html = """
+    <!DOCTYPE html><html><head>
     <style>
-        body {{ margin:0; padding:0; background:transparent; overflow:hidden; font-family:'Nunito',sans-serif; }}
-        #musicToggle {{
+        body { margin:0; padding:0; background:transparent; overflow:hidden; }
+        #musicToggle {
             position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(255,255,255,0.92);
+            top: 12px;
+            right: 12px;
+            background: rgba(255,255,255,0.95);
             border: 2px solid #ffb3cc;
             color: #d6336c;
             border-radius: 999px;
-            padding: 6px 14px;
+            padding: 8px 16px;
             font-size: 13px;
             font-weight: 700;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(214,51,108,0.25);
-            z-index: 99999;
-            transition: all 0.2s;
-        }}
-        #musicToggle:hover {{ transform: scale(1.05); background:#fff; }}
+            box-shadow: 0 4px 14px rgba(214,51,108,0.3);
+            z-index: 999999;
+            font-family: 'Nunito', sans-serif;
+            transition: transform 0.2s;
+        }
+        #musicToggle:hover { transform: scale(1.06); background:#fff; }
     </style>
     </head>
     <body>
     <button id="musicToggle">🔊 Musik</button>
-
     <script>
-        // ============================================================
-        // AUDIO ENGINE — pakai Web Audio API, tidak butuh file eksternal
-        // ============================================================
-        let audioCtx = null;
-        let musicRunning = false;
-        let musicTimer = null;
-        let musicEnabled = true;
-
-        function getCtx() {{
-            if (!audioCtx) {{
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }}
-            if (audioCtx.state === 'suspended') {{
-                audioCtx.resume();
-            }}
-            return audioCtx;
-        }}
-
-        // ---- Helper: main nada tunggal lembut ----
-        function playNote(freq, startTime, duration, volume, type='sine') {{
-            const ctx = getCtx();
-            const o = ctx.createOscillator();
-            const g = ctx.createGain();
-            o.type = type;
-            o.frequency.value = freq;
-            g.gain.setValueAtTime(0.0001, startTime);
-            g.gain.exponentialRampToValueAtTime(volume, startTime + 0.05);
-            g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-            o.connect(g);
-            g.connect(ctx.destination);
-            o.start(startTime);
-            o.stop(startTime + duration + 0.1);
-        }}
-
-        // ============================================================
-        // BACKGROUND MUSIC — chord romantis, loop terus
-        // ============================================================
-        // Progresi: C major → A minor → F major → G major (lagu romantis klasik)
-        const chordRoots = [261.63, 220.00, 174.61, 196.00];
-
-        function playRomanticChord(rootFreq, atTime) {{
-            const ctx = getCtx();
-            const dur = 4.0;
-            // intervals: root, major 3rd, 5th, major 7th, 9th (jazzy & warm)
-            const intervals = [1, 1.25, 1.5, 1.875, 2.25];
-            intervals.forEach((ratio, i) => {{
-                const vol = i === 0 ? 0.05 : (0.035 - i * 0.004);
-                playNote(rootFreq * ratio, atTime + i * 0.1, dur, Math.max(vol, 0.015), 'sine');
-            }});
-            // tambah melodi tinggi tipis
-            playNote(rootFreq * 2, atTime + 0.3, dur * 0.7, 0.02, 'triangle');
-        }}
-
-        let chordIdx = 0;
-        function startMusicLoop() {{
-            if (!musicEnabled) return;
-            if (musicRunning) return;
-            musicRunning = true;
-
-            function loop() {{
-                if (!musicRunning || !musicEnabled) return;
-                const ctx = getCtx();
-                playRomanticChord(chordRoots[chordIdx], ctx.currentTime + 0.05);
-                chordIdx = (chordIdx + 1) % chordRoots.length;
-                musicTimer = setTimeout(loop, 3900);
-            }}
-            loop();
-        }}
-
-        function stopMusicLoop() {{
-            musicRunning = false;
-            if (musicTimer) {{ clearTimeout(musicTimer); musicTimer = null; }}
-        }}
-
-        // ============================================================
-        // SOUND EFFECTS
-        // ============================================================
-        // Pop — buka kotak pertama
-        function sfxPop() {{
-            const ctx = getCtx();
-            const now = ctx.currentTime;
-            const o = ctx.createOscillator();
-            const g = ctx.createGain();
-            o.type = 'sine';
-            o.frequency.setValueAtTime(400, now);
-            o.frequency.exponentialRampToValueAtTime(900, now + 0.15);
-            g.gain.setValueAtTime(0.0001, now);
-            g.gain.exponentialRampToValueAtTime(0.2, now + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
-            o.connect(g); g.connect(ctx.destination);
-            o.start(now); o.stop(now + 0.5);
-        }}
-
-        // Ding — pesan baru muncul
-        function sfxDing() {{
-            const ctx = getCtx();
-            const now = ctx.currentTime;
-            [880, 1318.5].forEach((f, i) => {{
-                const o = ctx.createOscillator();
-                const g = ctx.createGain();
-                o.type = 'sine';
-                o.frequency.value = f;
-                const t = now + i * 0.09;
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
-                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-                o.connect(g); g.connect(ctx.destination);
-                o.start(t); o.stop(t + 0.75);
-            }});
-        }}
-
-        // Chime — surprise
-        function sfxChime() {{
-            const ctx = getCtx();
-            const now = ctx.currentTime;
-            [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {{
-                const o = ctx.createOscillator();
-                const g = ctx.createGain();
-                o.type = 'sine';
-                o.frequency.value = f;
-                const t = now + i * 0.13;
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.exponentialRampToValueAtTime(0.14, t + 0.03);
-                g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
-                o.connect(g); g.connect(ctx.destination);
-                o.start(t); o.stop(t + 1.35);
-            }});
-        }}
-
-        // Reset — kembali ke awal
-        function sfxReset() {{
-            const ctx = getCtx();
-            const now = ctx.currentTime;
-            [660, 440].forEach((f, i) => {{
-                const o = ctx.createOscillator();
-                const g = ctx.createGain();
-                o.type = 'sine';
-                o.frequency.value = f;
-                const t = now + i * 0.1;
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.exponentialRampToValueAtTime(0.1, t + 0.02);
-                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-                o.connect(g); g.connect(ctx.destination);
-                o.start(t); o.stop(t + 0.45);
-            }});
-        }}
-
-        // ============================================================
-        // AUTO UNLOCK — buka audio saat user interaksi pertama
-        // ============================================================
-        function unlock() {{
-            getCtx();
-            // tunggu ctx benar-benar running, baru start music
-            const ctx = getCtx();
-            const tryStart = () => {{
-                if (ctx.state === 'running') {{
-                    startMusicLoop();
-                }} else {{
-                    setTimeout(tryStart, 100);
-                }}
-            }};
-            tryStart();
-        }}
-
-        // pasang listener ke parent document (biar klik tombol Streamlit kepicu)
-        const parentDoc = window.parent ? window.parent.document : document;
-        ['click', 'keydown', 'touchstart'].forEach(ev => {{
-            parentDoc.addEventListener(ev, unlock, {{ once: false, capture: true }});
-            document.addEventListener(ev, unlock, {{ once: false }});
-        }});
-
-        // ============================================================
-        // PLAY SFX yang diminta dari Python
-        // ============================================================
-        const sfxToPlay = "{sfx_to_play}";
-        if (sfxToPlay === "pop") {{
-            setTimeout(() => {{ getCtx(); sfxPop(); }}, 150);
-        }} else if (sfxToPlay === "ding") {{
-            setTimeout(() => {{ getCtx(); sfxDing(); }}, 150);
-        }} else if (sfxToPlay === "chime") {{
-            setTimeout(() => {{ getCtx(); sfxChime(); }}, 150);
-        }} else if (sfxToPlay === "reset") {{
-            setTimeout(() => {{ getCtx(); sfxReset(); }}, 150);
-        }}
-
-        // ============================================================
-        // TOGGLE MUSIK
-        // ============================================================
         const btn = document.getElementById('musicToggle');
-        btn.addEventListener('click', (e) => {{
+        const P = window.parent;
+
+        function refresh() {
+            if (typeof P.__loveMusicEnabled === 'function') {
+                btn.textContent = P.__loveMusicEnabled() ? '🔊 Musik' : '🔇 Musik';
+            }
+        }
+
+        btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            musicEnabled = !musicEnabled;
-            if (musicEnabled) {{
-                btn.textContent = '🔊 Musik';
-                getCtx();
-                startMusicLoop();
-            }} else {{
-                btn.textContent = '🔇 Musik';
-                stopMusicLoop();
-            }}
-        }});
+            if (typeof P.__loveToggleMusic === 'function') {
+                P.__loveToggleMusic();
+                setTimeout(refresh, 100);
+            }
+        });
+
+        setInterval(refresh, 1000);
+        refresh();
     </script>
-    </body>
-    </html>
+    </body></html>
     """
-    components.html(html, height=50)
+    components.html(html, height=0)
 
 
-# ================== RENDER AUDIO DI SETIAP HALAMAN ==================
-# PENTING: dipanggil SEBELUM tombol supaya SFX yang diminta langsung kepicu
-render_audio_player(st.session_state.sfx)
+# ================== PASANG AUDIO ENGINE (cuma sekali, nempel di parent) ==================
+inject_audio_engine()
+render_music_toggle()
+
+# Trigger SFX yang diminta (kalau ada)
+if st.session_state.sfx:
+    trigger_sfx(st.session_state.sfx)
+    st.session_state.sfx = ""
 
 
 # ================== HALAMAN 0: AWAL ==================
@@ -702,10 +738,6 @@ elif st.session_state.step == 99:
         reset_semua()
         st.session_state.sfx = "reset"
         st.rerun()
-
-
-# ================== RESET SFX SETELAH DIPAKAI ==================
-st.session_state.sfx = ""
 
 
 # ================== FOOTER ==================
