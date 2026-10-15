@@ -1,6 +1,8 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import random
+import base64
+import os
 
 # ================== KONFIG ==================
 st.set_page_config(
@@ -9,36 +11,42 @@ st.set_page_config(
     layout="centered"
 )
 
+# ================== LOAD LAGU (opsional) ==================
+# Kalau kamu punya file mp3 di folder assets/, dia bakal kepakai.
+# Kalau nggak ada, fallback ke URL online lagu romantis.
+def load_lagu_base64():
+    path = "assets/lagu.mp3"
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return None
+
+LAGU_B64 = load_lagu_base64()
+
+# Fallback URL — ganti kalau mau pakai lagu lain
+# Ini pakai lagu royalty-free romantis dari Pixabay
+LAGU_URL_FALLBACK = "https://cdn.pixabay.com/download/audio/2022/10/25/audio_5c1c92b1e4.mp3?filename=relaxing-piano-music-114799.mp3"
+
 # ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
-    "Dikit lagi selesai kok, jangan nyerah dulu ya.",
-    "Skripsi atau tugasnya bakal kangen kamu kalau gak dikerjain.",
-    "Capek itu wajar. Kamu lebih kuat dari capeknya.",
-    "Coba nugas sambil dengerin lagu favorit, dijamin lebih ringan.",
+    "Sayang... aku tahu kamu capek, tapi aku percaya kamu pasti bisa. Semangat ya, cintakuu.",
+    "Aku tahu tugas kamu banyak, tapi aku juga tahu kamu sekuat itu. Aku bangga banget sama kamu.",
+    "Capek boleh, istirahat dulu juga boleh. Kamu nggak harus selalu kuat setiap saat, yaa... Aku tetap bangga sama kamu, apa pun hasilnya.",
+    "Coba nugas sambil bayangin aku lagi nemenin kamu, yaa. Anggap aja aku lagi duduk di samping kamu sambil elus kepala kamu pelan-pelan. 🤍",
     "Kalau udah selesai, aku traktir kamu es krim.",
-    "Dunia butuh orang pinter. Jadi jangan males ya.",
-    "Istirahat boleh, nyerah jangan.",
-    "Kamu itu hebat. Aku aja bangga liat kamu berjuang.",
-    "Semangat. Nanti aku elus-elus kepala kamu, bayangin aja dulu.",
-    "Dikit lagi. Janji, setelah ini kita have fun.",
-    "Aku percaya kamu bisa. Jadi kamu harus percaya juga.",
-    "Jangan lupa makan dan minum, jangan sampai tumbang.",
-    "Pelan-pelan aja. Gak usah buru-buru.",
-    "Kamu tuh pinter. Kadang aja kamu lupa kalau kamu pinter.",
-    "Sabar ya. Semua ini bakal worth it kok.",
-    "Kalau bingung, tarik napas. Terus mikir lagi. Kamu bisa.",
+    "Kalau tugas kamu udah selesai, sini cerita sama aku. Aku mau dengerin semua keluh kesah kamu, terus aku peluk yang lamaaa.",
 ]
 
 # ================== PARAGRAF CINTA ==================
 kalimat_penutup = (
-    "Jujur ya, aku gak tau harus gimana ngejelasin ini semua ke kamu. "
+    "Sayang... aku gak tau harus gimana ngejelasin ini semua ke kamu. "
     "Tiap hari rasanya aku makin sayang, makin cinta, makin pengen kamu bahagia terus. "
     "Kamu itu bukan cuma pacar. Kamu udah jadi tempat aku pulang, tempat aku cerita hal-hal random, "
-    "tempat aku jadi diri aku sendiri tanpa takut dihakimi. "
-    "Makasih ya udah bertahan, udah sabar, udah sayang sama aku yang kadang nyebelin ini. "
-    "Aku gak janji bisa jadi sempurna, tapi aku janji bakal terus ada buat kamu, "
+    "Makasih ya udah bertahan, udah sabar, udah sayang sama aku yang menyebalkan ini. "
+    "Kita tau hubungan tidak selalu mulus, tapi aku janji bakal terus ada buat kamu, "
     "di hari kamu senang, di hari kamu capek, di hari kamu ngerasa sendirian. "
-    "Pokoknya, aku cinta banget sama kamu. Banget. Serius. Gak boong."
+    "Pokoknya, aku cinta banget banget banget sama kamu. "
+    "I LOVE YOU SOOOOOOOOOO MMMMUUUUUUCCCHHHHH SAYANGGGG!!!!!!"
 )
 
 # ================== CSS ==================
@@ -53,7 +61,6 @@ st.markdown("""
 
     #MainMenu, footer, header {visibility: hidden;}
 
-    /* ====== Judul ====== */
     .judul {
         text-align: center;
         font-family: 'Caveat', cursive;
@@ -79,7 +86,6 @@ st.markdown("""
         to { opacity: 1; transform: translateY(0); }
     }
 
-    /* ====== Kotak misteri ====== */
     .box-wrap {
         display: flex;
         justify-content: center;
@@ -116,7 +122,6 @@ st.markdown("""
         60% { transform: rotate(0deg); }
     }
 
-    /* ====== Card pesan ====== */
     .pesan-card {
         background: rgba(255, 255, 255, 0.96);
         border-radius: 22px;
@@ -146,21 +151,11 @@ st.markdown("""
     }
 
     @keyframes cardIn {
-        0% {
-            opacity: 0;
-            transform: translateY(18px) scale(0.94);
-            filter: blur(4px);
-        }
-        60% {
-            filter: blur(0);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
+        0% { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); }
+        60% { filter: blur(0); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* ====== Counter ====== */
     .counter {
         text-align: center;
         color: #d6336c;
@@ -171,7 +166,6 @@ st.markdown("""
         animation: fadeDown 0.9s ease-out;
     }
 
-    /* ====== Tombol ====== */
     .stButton > button {
         background: linear-gradient(135deg, #ff7fae, #d6336c) !important;
         color: #fff !important;
@@ -197,7 +191,6 @@ st.markdown("""
         transform: translateY(-1px) scale(0.99);
     }
 
-    /* ====== Footer ====== */
     .footer {
         text-align: center;
         color: #d6336c;
@@ -223,7 +216,11 @@ if "sisa_pesan" not in st.session_state:
     st.session_state.sisa_pesan = pool
 
 if "key_pesan" not in st.session_state:
-    st.session_state.key_pesan = 0  # buat trigger animasi baru
+    st.session_state.key_pesan = 0
+
+# suara yang harus dipicu setelah klik (dibaca oleh komponen HTML)
+if "sfx_trigger" not in st.session_state:
+    st.session_state.sfx_trigger = ""
 
 
 def ambil_pesan_baru():
@@ -238,9 +235,227 @@ def reset_semua():
     st.session_state.step = 0
     st.session_state.pesan_sekarang = ""
     st.session_state.key_pesan = 0
+    st.session_state.sfx_trigger = ""
     pool = kata_nugas.copy()
     random.shuffle(pool)
     st.session_state.sisa_pesan = pool
+
+
+# ================== AUDIO ENGINE (di-inject ke setiap halaman) ==================
+def inject_audio_engine():
+    """Web Audio API untuk SFX + pemutar lagu latar."""
+    # Tentukan sumber lagu
+    if LAGU_B64:
+        lagu_src = f"data:audio/mp3;base64,{LAGU_B64}"
+    else:
+        lagu_src = LAGU_URL_FALLBACK
+
+    sfx = st.session_state.sfx_trigger
+
+    html = f"""
+    <!DOCTYPE html>
+    <html><head><style>body{{margin:0;background:transparent;overflow:hidden;}}</style></head>
+    <body>
+    <audio id="bgMusic" loop preload="auto" style="display:none;">
+        <source src="{lagu_src}" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // ================== SFX ENGINE (Web Audio API) ==================
+        let audioCtx = null;
+        function getCtx() {{
+            if (!audioCtx) {{
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }}
+            if (audioCtx.state === 'suspended') {{
+                audioCtx.resume();
+            }}
+            return audioCtx;
+        }}
+
+        // Bunyi "pop" lembut — untuk buka kotak
+        function playPop() {{
+            const ctx = getCtx();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(520, ctx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+            g.gain.setValueAtTime(0.0001, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(); o.stop(ctx.currentTime + 0.4);
+        }}
+
+        // Bunyi "ding" manis — untuk pesan muncul
+        function playDing() {{
+            const ctx = getCtx();
+            const notes = [880, 1318.5]; // A5 + E6
+            notes.forEach((f, i) => {{
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'triangle';
+                o.frequency.value = f;
+                const start = ctx.currentTime + i * 0.08;
+                g.gain.setValueAtTime(0.0001, start);
+                g.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
+                o.connect(g); g.connect(ctx.destination);
+                o.start(start); o.stop(start + 1);
+            }});
+        }}
+
+        // Chime halus untuk surprise — melodi naik lembut
+        function playChime() {{
+            const ctx = getCtx();
+            const melody = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+            melody.forEach((f, i) => {{
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'sine';
+                o.frequency.value = f;
+                const start = ctx.currentTime + i * 0.18;
+                g.gain.setValueAtTime(0.0001, start);
+                g.gain.exponentialRampToValueAtTime(0.14, start + 0.03);
+                g.gain.exponentialRampToValueAtTime(0.0001, start + 1.2);
+                o.connect(g); g.connect(ctx.destination);
+                o.start(start); o.stop(start + 1.3);
+            }});
+        }}
+
+        // ================== BACKGROUND MUSIC ==================
+        const music = document.getElementById('bgMusic');
+        music.volume = 0.28; // pelan & menenangkan
+
+        // Simpan posisi waktu lagu di localStorage biar gak reset tiap rerun
+        const savedTime = parseFloat(localStorage.getItem('musicTime') || '0');
+        if (savedTime > 0) {{
+            music.currentTime = savedTime;
+        }}
+
+        // Simpan juga status play/pause & mute
+        const wasPlaying = localStorage.getItem('musicPlaying') === 'true';
+        const wasMuted = localStorage.getItem('musicMuted') === 'true';
+        music.muted = wasMuted;
+
+        // Simpan progress tiap 500ms
+        setInterval(() => {{
+            if (!music.paused) {{
+                localStorage.setItem('musicTime', music.currentTime);
+            }}
+        }}, 500);
+
+        // Trigger play saat ada interaksi pertama
+        function tryPlay() {{
+            music.play().then(() => {{
+                localStorage.setItem('musicPlaying', 'true');
+            }}).catch(e => {{
+                // browser blokir, tunggu interaksi lain
+            }});
+        }}
+
+        // Coba play langsung (kalau user udah pernah interaksi sebelumnya)
+        if (wasPlaying) {{
+            tryPlay();
+        }}
+
+        // Pasang listener interaksi pertama di dokumen
+        ['click', 'keydown', 'touchstart'].forEach(ev => {{
+            document.addEventListener(ev, function handler() {{
+                tryPlay();
+                document.removeEventListener(ev, handler);
+            }}, {{ once: true }});
+        }});
+
+        // ================== TRIGGER SFX DARI PYTHON ==================
+        const trigger = "{sfx}";
+        if (trigger === 'pop') {{
+            setTimeout(playPop, 80);
+        }} else if (trigger === 'ding') {{
+            setTimeout(playDing, 120);
+        }} else if (trigger === 'chime') {{
+            setTimeout(playChime, 200);
+        }}
+    </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
+# ================== TOMBOL MUTE / PLAY LAGU ==================
+def tombol_musik():
+    """Tombol kecil untuk pause/play lagu."""
+    html = """
+    <!DOCTYPE html>
+    <html><head>
+    <style>
+        body { margin:0; background:transparent; font-family:'Nunito',sans-serif; }
+        .music-btn {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            background: rgba(255,255,255,0.9);
+            border: 2px solid #ffb3cc;
+            color: #d6336c;
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 0.85em;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(214,51,108,0.25);
+            transition: all 0.25s;
+            z-index: 9999;
+            font-family: 'Nunito', sans-serif;
+        }
+        .music-btn:hover {
+            transform: scale(1.06);
+            background: #fff;
+        }
+    </style>
+    </head>
+    <body>
+        <button class="music-btn" id="musicToggle">🎵 Musik</button>
+        <script>
+            const btn = document.getElementById('musicToggle');
+            const music = window.parent.document.querySelector('audio#bgMusic')
+                       || document.querySelector('audio#bgMusic');
+
+            function updateLabel() {
+                // Cari elemen audio di parent (komponen streamlit)
+                const audios = window.parent.document.querySelectorAll('audio');
+                let playing = false;
+                audios.forEach(a => { if (!a.paused && !a.muted) playing = true; });
+                btn.textContent = playing ? '🔊 Musik' : '🔇 Musik';
+            }
+
+            btn.addEventListener('click', () => {
+                const audios = window.parent.document.querySelectorAll('audio');
+                audios.forEach(a => {
+                    if (a.paused || a.muted) {
+                        a.muted = false;
+                        a.play();
+                        localStorage.setItem('musicPlaying','true');
+                        localStorage.setItem('musicMuted','false');
+                    } else {
+                        a.pause();
+                        localStorage.setItem('musicPlaying','false');
+                    }
+                });
+                setTimeout(updateLabel, 100);
+            });
+
+            setInterval(updateLabel, 800);
+            updateLabel();
+        </script>
+    </body></html>
+    """
+    components.html(html, height=0)
+
+
+# ================== INJECT AUDIO KE SETIAP HALAMAN ==================
+inject_audio_engine()
+tombol_musik()
 
 
 # ================== HALAMAN 0: AWAL ==================
@@ -260,6 +475,7 @@ if st.session_state.step == 0:
     if st.button("Buka kotaknya 💌"):
         st.session_state.step = 1
         ambil_pesan_baru()
+        st.session_state.sfx_trigger = "pop"  # 🎵 bunyi pop pas buka kotak
         st.rerun()
 
 
@@ -267,7 +483,6 @@ if st.session_state.step == 0:
 elif st.session_state.step == 1:
     st.markdown('<div class="judul">Sebuah pesan untukmu</div>', unsafe_allow_html=True)
 
-    # key berubah setiap pesan baru → animasi cardIn dipicu ulang
     st.markdown(
         f'<div class="pesan-card" key="p{st.session_state.key_pesan}">'
         f'{st.session_state.pesan_sekarang}</div>',
@@ -288,6 +503,7 @@ elif st.session_state.step == 1:
     if sisa > 0:
         if st.button("Lanjut, buka kotak berikutnya 🌷"):
             ambil_pesan_baru()
+            st.session_state.sfx_trigger = "ding"  # 🎵 bunyi ding pas muncul pesan
             st.rerun()
     else:
         st.markdown(
@@ -297,6 +513,7 @@ elif st.session_state.step == 1:
         )
         if st.button("Buka yang terakhir ✨"):
             st.session_state.step = 99
+            st.session_state.sfx_trigger = "chime"  # 🎵 chime pas surprise
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -332,7 +549,6 @@ elif st.session_state.step == 99:
             pointer-events: none;
         }}
 
-        /* Partikel love halus, jatuh perlahan */
         .petal {{
             position: fixed;
             top: -30px;
@@ -344,19 +560,12 @@ elif st.session_state.step == 99:
         }}
 
         @keyframes petalFall {{
-            0% {{
-                opacity: 0;
-                transform: translateY(-20px) rotate(0deg);
-            }}
+            0% {{ opacity: 0; transform: translateY(-20px) rotate(0deg); }}
             10% {{ opacity: 0.9; }}
             90% {{ opacity: 0.9; }}
-            100% {{
-                opacity: 0;
-                transform: translateY(105vh) rotate(360deg);
-            }}
+            100% {{ opacity: 0; transform: translateY(105vh) rotate(360deg); }}
         }}
 
-        /* Konten utama */
         .konten {{
             position: relative;
             z-index: 3;
@@ -372,16 +581,9 @@ elif st.session_state.step == 99:
         }}
 
         @keyframes popIn {{
-            0% {{
-                opacity: 0;
-                transform: scale(0.82) translateY(20px);
-                filter: blur(6px);
-            }}
+            0% {{ opacity: 0; transform: scale(0.82) translateY(20px); filter: blur(6px); }}
             60% {{ filter: blur(0); }}
-            100% {{
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }}
+            100% {{ opacity: 1; transform: scale(1) translateY(0); }}
         }}
 
         .judul-surprise {{
@@ -452,7 +654,7 @@ elif st.session_state.step == 99:
     </div>
 
     <script>
-        // ===== PETAL / LOVE JATUH HALUS =====
+        // ===== PETAL JATUH =====
         const petals = ['🌸','🌷','💗','✨','🩷'];
         function spawnPetal() {{
             const el = document.createElement('div');
@@ -460,14 +662,14 @@ elif st.session_state.step == 99:
             el.textContent = petals[Math.floor(Math.random() * petals.length)];
             el.style.left = Math.random() * 100 + 'vw';
             el.style.fontSize = (Math.random() * 8 + 14) + 'px';
-            const dur = Math.random() * 5 + 7; // 7–12 detik, jatuh pelan
+            const dur = Math.random() * 5 + 7;
             el.style.animationDuration = dur + 's';
             document.body.appendChild(el);
             setTimeout(() => el.remove(), dur * 1000 + 500);
         }}
         setInterval(spawnPetal, 700);
 
-        // ===== FIREWORKS ELEGAN (pink & gold) =====
+        // ===== FIREWORKS =====
         const canvas = document.getElementById('fireworks');
         const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
@@ -479,7 +681,6 @@ elif st.session_state.step == 99:
         }});
 
         const particles = [];
-        // palet pink-gold-putih, bukan pelangi norak
         const colors = [
             '#ff7fae', '#d6336c', '#ffb3cc',
             '#ffd9a0', '#ffe8b0', '#ffffff',
@@ -493,8 +694,7 @@ elif st.session_state.step == 99:
                 const angle = (Math.PI * 2 * i) / count + Math.random() * 0.15;
                 const speed = Math.random() * 4.5 + 1.8;
                 particles.push({{
-                    x: x,
-                    y: y,
+                    x: x, y: y,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     life: 1,
@@ -506,23 +706,17 @@ elif st.session_state.step == 99:
         }}
 
         function animate() {{
-            // trail halus, bukan kotak hitam
             ctx.fillStyle = 'rgba(255, 233, 240, 0.18)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             for (let i = particles.length - 1; i >= 0; i--) {{
                 const p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
+                p.x += p.vx; p.y += p.vy;
                 p.vy += 0.05;
-                p.vx *= 0.985;
-                p.vy *= 0.985;
+                p.vx *= 0.985; p.vy *= 0.985;
                 p.life -= p.decay;
 
-                if (p.life <= 0) {{
-                    particles.splice(i, 1);
-                    continue;
-                }}
+                if (p.life <= 0) {{ particles.splice(i, 1); continue; }}
 
                 ctx.globalAlpha = Math.max(p.life, 0);
                 ctx.fillStyle = p.color;
@@ -533,10 +727,8 @@ elif st.session_state.step == 99:
             ctx.globalAlpha = 1;
             requestAnimationFrame(animate);
         }}
-
         animate();
 
-        // interval lebih jarang, biar elegan bukan rame
         setInterval(() => {{
             createFirework(
                 Math.random() * canvas.width,
@@ -544,7 +736,6 @@ elif st.session_state.step == 99:
             );
         }}, 1400);
 
-        // opening burst
         setTimeout(() => createFirework(canvas.width * 0.5, canvas.height * 0.28), 400);
         setTimeout(() => createFirework(canvas.width * 0.28, canvas.height * 0.45), 900);
         setTimeout(() => createFirework(canvas.width * 0.72, canvas.height * 0.38), 1400);
@@ -560,6 +751,11 @@ elif st.session_state.step == 99:
     if st.button("🔄 Ulang dari awal ya"):
         reset_semua()
         st.rerun()
+
+
+# Reset SFX trigger setelah ditampilkan (biar gak keulang tiap rerun)
+if st.session_state.sfx_trigger:
+    st.session_state.sfx_trigger = ""
 
 
 # ================== FOOTER ==================
