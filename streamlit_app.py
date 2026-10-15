@@ -1,8 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import random
-import base64
-import os
 
 # ================== KONFIG ==================
 st.set_page_config(
@@ -10,22 +8,6 @@ st.set_page_config(
     page_icon="🌸",
     layout="centered"
 )
-
-# ================== LOAD LAGU (opsional) ==================
-# Kalau kamu punya file mp3 di folder assets/, dia bakal kepakai.
-# Kalau nggak ada, fallback ke URL online lagu romantis.
-def load_lagu_base64():
-    path = "assets/lagu.mp3"
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return None
-
-LAGU_B64 = load_lagu_base64()
-
-# Fallback URL — ganti kalau mau pakai lagu lain
-# Ini pakai lagu royalty-free romantis dari Pixabay
-LAGU_URL_FALLBACK = "https://cdn.pixabay.com/download/audio/2022/10/25/audio_5c1c92b1e4.mp3?filename=relaxing-piano-music-114799.mp3"
 
 # ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
@@ -218,10 +200,6 @@ if "sisa_pesan" not in st.session_state:
 if "key_pesan" not in st.session_state:
     st.session_state.key_pesan = 0
 
-# suara yang harus dipicu setelah klik (dibaca oleh komponen HTML)
-if "sfx_trigger" not in st.session_state:
-    st.session_state.sfx_trigger = ""
-
 
 def ambil_pesan_baru():
     if not st.session_state.sisa_pesan:
@@ -235,227 +213,205 @@ def reset_semua():
     st.session_state.step = 0
     st.session_state.pesan_sekarang = ""
     st.session_state.key_pesan = 0
-    st.session_state.sfx_trigger = ""
     pool = kata_nugas.copy()
     random.shuffle(pool)
     st.session_state.sisa_pesan = pool
 
 
-# ================== AUDIO ENGINE (di-inject ke setiap halaman) ==================
+# ================== AUDIO ENGINE (SFX + Background Music) ==================
 def inject_audio_engine():
-    """Web Audio API untuk SFX + pemutar lagu latar."""
-    # Tentukan sumber lagu
-    if LAGU_B64:
-        lagu_src = f"data:audio/mp3;base64,{LAGU_B64}"
-    else:
-        lagu_src = LAGU_URL_FALLBACK
-
-    sfx = st.session_state.sfx_trigger
-
-    html = f"""
+    """注入 Web Audio API：背景钢琴曲 + 所有操作的音效"""
+    html = """
     <!DOCTYPE html>
-    <html><head><style>body{{margin:0;background:transparent;overflow:hidden;}}</style></head>
+    <html><head><style>body{margin:0;background:transparent;overflow:hidden;}</style></head>
     <body>
-    <audio id="bgMusic" loop preload="auto" style="display:none;">
-        <source src="{lagu_src}" type="audio/mpeg">
-    </audio>
-
     <script>
-        // ================== SFX ENGINE (Web Audio API) ==================
+        // ========== 全局 AudioContext ==========
         let audioCtx = null;
-        function getCtx() {{
-            if (!audioCtx) {{
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }}
-            if (audioCtx.state === 'suspended') {{
-                audioCtx.resume();
-            }}
-            return audioCtx;
-        }}
+        let musicStarted = false;
+        let musicTimer = null;
 
-        // Bunyi "pop" lembut — untuk buka kotak
-        function playPop() {{
+        function getCtx() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        // ========== 柔和钢琴和弦生成器 ==========
+        // 使用正弦波合成柔和、延绵的钢琴感音色
+        function playSoftNote(freq, startTime, duration, volume) {
             const ctx = getCtx();
             const o = ctx.createOscillator();
             const g = ctx.createGain();
+
             o.type = 'sine';
-            o.frequency.setValueAtTime(520, ctx.currentTime);
-            o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
-            g.gain.setValueAtTime(0.0001, ctx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+            o.frequency.value = freq;
+
+            // 柔和的 attack + 长 release
+            g.gain.setValueAtTime(0.0001, startTime);
+            g.gain.exponentialRampToValueAtTime(volume, startTime + 0.08);
+            g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.start(startTime);
+            o.stop(startTime + duration + 0.1);
+        }
+
+        // 弹奏一个柔和的钢琴和弦（C大调 9 和弦 - 温暖浪漫）
+        function playRomanticChord(rootFreq) {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const dur = 3.5;
+            // C9 和弦音程：根音、三度、五度、七度、九度
+            const intervals = [1, 1.25, 1.5, 1.8, 2.25];
+            intervals.forEach((ratio, i) => {
+                // 音量略微错开，低音稍响
+                const vol = i === 0 ? 0.06 : 0.04 - i * 0.004;
+                playSoftNote(rootFreq * ratio, now + i * 0.15, dur, vol);
+            });
+        }
+
+        // ========== 背景音乐循环 ==========
+        // 使用几个柔和的根音循环：C4, A3, F3, G3
+        const roots = [261.63, 220.00, 174.61, 196.00];
+        let rootIndex = 0;
+
+        function startMusic() {
+            if (musicStarted) return;
+            musicStarted = true;
+
+            function playLoop() {
+                if (!musicStarted) return;
+                playRomanticChord(roots[rootIndex]);
+                rootIndex = (rootIndex + 1) % roots.length;
+                // 每 4 秒换一个和弦
+                musicTimer = setTimeout(playLoop, 4000);
+            }
+            playLoop();
+        }
+
+        function stopMusic() {
+            musicStarted = false;
+            if (musicTimer) {
+                clearTimeout(musicTimer);
+                musicTimer = null;
+            }
+        }
+
+        // ========== 音效函数 ==========
+        // 1. 开箱"叮"声 - 柔和的高音点击感
+        function playBoxOpen() {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(880, now);
+            o.frequency.exponentialRampToValueAtTime(1320, now + 0.1);
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
             o.connect(g); g.connect(ctx.destination);
-            o.start(); o.stop(ctx.currentTime + 0.4);
-        }}
+            o.start(now); o.stop(now + 0.45);
+        }
 
-        // Bunyi "ding" manis — untuk pesan muncul
-        function playDing() {{
+        // 2. 翻页/新消息"叮咚" - 两个音符
+        function playDing() {
             const ctx = getCtx();
-            const notes = [880, 1318.5]; // A5 + E6
-            notes.forEach((f, i) => {{
-                const o = ctx.createOscillator();
-                const g = ctx.createGain();
-                o.type = 'triangle';
-                o.frequency.value = f;
-                const start = ctx.currentTime + i * 0.08;
-                g.gain.setValueAtTime(0.0001, start);
-                g.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
-                g.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
-                o.connect(g); g.connect(ctx.destination);
-                o.start(start); o.stop(start + 1);
-            }});
-        }}
-
-        // Chime halus untuk surprise — melodi naik lembut
-        function playChime() {{
-            const ctx = getCtx();
-            const melody = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-            melody.forEach((f, i) => {{
+            const now = ctx.currentTime;
+            [660, 990].forEach((f, i) => {
                 const o = ctx.createOscillator();
                 const g = ctx.createGain();
                 o.type = 'sine';
                 o.frequency.value = f;
-                const start = ctx.currentTime + i * 0.18;
-                g.gain.setValueAtTime(0.0001, start);
-                g.gain.exponentialRampToValueAtTime(0.14, start + 0.03);
-                g.gain.exponentialRampToValueAtTime(0.0001, start + 1.2);
+                const t = now + i * 0.08;
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.exponentialRampToValueAtTime(0.1, t + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
                 o.connect(g); g.connect(ctx.destination);
-                o.start(start); o.stop(start + 1.3);
-            }});
-        }}
+                o.start(t); o.stop(t + 0.65);
+            });
+        }
 
-        // ================== BACKGROUND MUSIC ==================
-        const music = document.getElementById('bgMusic');
-        music.volume = 0.28; // pelan & menenangkan
+        // 3. 惊喜/烟花"叮铃铃" - 上升琶音
+        function playSurprise() {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'sine';
+                o.frequency.value = f;
+                const t = now + i * 0.12;
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.exponentialRampToValueAtTime(0.09, t + 0.03);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+                o.connect(g); g.connect(ctx.destination);
+                o.start(t); o.stop(t + 1.05);
+            });
+        }
 
-        // Simpan posisi waktu lagu di localStorage biar gak reset tiap rerun
-        const savedTime = parseFloat(localStorage.getItem('musicTime') || '0');
-        if (savedTime > 0) {{
-            music.currentTime = savedTime;
-        }}
+        // 4. 重置"滴" - 简单轻柔
+        function playReset() {
+            const ctx = getCtx();
+            const now = ctx.currentTime;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 440;
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(now); o.stop(now + 0.35);
+        }
 
-        // Simpan juga status play/pause & mute
-        const wasPlaying = localStorage.getItem('musicPlaying') === 'true';
-        const wasMuted = localStorage.getItem('musicMuted') === 'true';
-        music.muted = wasMuted;
+        // ========== 首次交互时启动所有音频 ==========
+        function unlockAudio() {
+            getCtx();
+            startMusic();
+            document.removeEventListener('click', unlockAudio);
+            document.removeEventListener('touchstart', unlockAudio);
+            document.removeEventListener('keydown', unlockAudio);
+        }
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('touchstart', unlockAudio);
+        document.addEventListener('keydown', unlockAudio);
 
-        // Simpan progress tiap 500ms
-        setInterval(() => {{
-            if (!music.paused) {{
-                localStorage.setItem('musicTime', music.currentTime);
-            }}
-        }}, 500);
-
-        // Trigger play saat ada interaksi pertama
-        function tryPlay() {{
-            music.play().then(() => {{
-                localStorage.setItem('musicPlaying', 'true');
-            }}).catch(e => {{
-                // browser blokir, tunggu interaksi lain
-            }});
-        }}
-
-        // Coba play langsung (kalau user udah pernah interaksi sebelumnya)
-        if (wasPlaying) {{
-            tryPlay();
-        }}
-
-        // Pasang listener interaksi pertama di dokumen
-        ['click', 'keydown', 'touchstart'].forEach(ev => {{
-            document.addEventListener(ev, function handler() {{
-                tryPlay();
-                document.removeEventListener(ev, handler);
-            }}, {{ once: true }});
-        }});
-
-        // ================== TRIGGER SFX DARI PYTHON ==================
-        const trigger = "{sfx}";
-        if (trigger === 'pop') {{
-            setTimeout(playPop, 80);
-        }} else if (trigger === 'ding') {{
-            setTimeout(playDing, 120);
-        }} else if (trigger === 'chime') {{
-            setTimeout(playChime, 200);
-        }}
+        // 暴露给 Streamlit 调用
+        window.__playBoxOpen = playBoxOpen;
+        window.__playDing = playDing;
+        window.__playSurprise = playSurprise;
+        window.__playReset = playReset;
+        window.__startMusic = startMusic;
+        window.__stopMusic = stopMusic;
     </script>
     </body></html>
     """
     components.html(html, height=0)
 
 
-# ================== TOMBOL MUTE / PLAY LAGU ==================
-def tombol_musik():
-    """Tombol kecil untuk pause/play lagu."""
-    html = """
-    <!DOCTYPE html>
-    <html><head>
-    <style>
-        body { margin:0; background:transparent; font-family:'Nunito',sans-serif; }
-        .music-btn {
-            position: fixed;
-            top: 14px;
-            right: 14px;
-            background: rgba(255,255,255,0.9);
-            border: 2px solid #ffb3cc;
-            color: #d6336c;
-            border-radius: 999px;
-            padding: 8px 14px;
-            font-size: 0.85em;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(214,51,108,0.25);
-            transition: all 0.25s;
-            z-index: 9999;
-            font-family: 'Nunito', sans-serif;
-        }
-        .music-btn:hover {
-            transform: scale(1.06);
-            background: #fff;
-        }
-    </style>
-    </head>
-    <body>
-        <button class="music-btn" id="musicToggle">🎵 Musik</button>
-        <script>
-            const btn = document.getElementById('musicToggle');
-            const music = window.parent.document.querySelector('audio#bgMusic')
-                       || document.querySelector('audio#bgMusic');
-
-            function updateLabel() {
-                // Cari elemen audio di parent (komponen streamlit)
-                const audios = window.parent.document.querySelectorAll('audio');
-                let playing = false;
-                audios.forEach(a => { if (!a.paused && !a.muted) playing = true; });
-                btn.textContent = playing ? '🔊 Musik' : '🔇 Musik';
-            }
-
-            btn.addEventListener('click', () => {
-                const audios = window.parent.document.querySelectorAll('audio');
-                audios.forEach(a => {
-                    if (a.paused || a.muted) {
-                        a.muted = false;
-                        a.play();
-                        localStorage.setItem('musicPlaying','true');
-                        localStorage.setItem('musicMuted','false');
-                    } else {
-                        a.pause();
-                        localStorage.setItem('musicPlaying','false');
-                    }
-                });
-                setTimeout(updateLabel, 100);
-            });
-
-            setInterval(updateLabel, 800);
-            updateLabel();
-        </script>
-    </body></html>
-    """
-    components.html(html, height=0)
-
-
-# ================== INJECT AUDIO KE SETIAP HALAMAN ==================
+# 在每次 rerun 时注入音频引擎（确保持久存在）
 inject_audio_engine()
-tombol_musik()
+
+
+# ================== 音效触发辅助函数 ==================
+def trigger_sfx(sfx_name: str):
+    """通过 components 执行 JS 来播放指定音效"""
+    js = f"""
+    <script>
+        (function() {{
+            const fn = window.parent['__{sfx_name}'];
+            if (typeof fn === 'function') fn();
+        }})();
+    </script>
+    """
+    components.html(js, height=0)
 
 
 # ================== HALAMAN 0: AWAL ==================
@@ -473,9 +429,9 @@ if st.session_state.step == 0:
     )
 
     if st.button("Buka kotaknya 💌"):
+        trigger_sfx("playBoxOpen")
         st.session_state.step = 1
         ambil_pesan_baru()
-        st.session_state.sfx_trigger = "pop"  # 🎵 bunyi pop pas buka kotak
         st.rerun()
 
 
@@ -502,8 +458,8 @@ elif st.session_state.step == 1:
 
     if sisa > 0:
         if st.button("Lanjut, buka kotak berikutnya 🌷"):
+            trigger_sfx("playDing")
             ambil_pesan_baru()
-            st.session_state.sfx_trigger = "ding"  # 🎵 bunyi ding pas muncul pesan
             st.rerun()
     else:
         st.markdown(
@@ -512,12 +468,13 @@ elif st.session_state.step == 1:
             unsafe_allow_html=True
         )
         if st.button("Buka yang terakhir ✨"):
+            trigger_sfx("playSurprise")
             st.session_state.step = 99
-            st.session_state.sfx_trigger = "chime"  # 🎵 chime pas surprise
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Ulang dari awal"):
+        trigger_sfx("playReset")
         reset_semua()
         st.rerun()
 
@@ -749,13 +706,9 @@ elif st.session_state.step == 99:
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Ulang dari awal ya"):
+        trigger_sfx("playReset")
         reset_semua()
         st.rerun()
-
-
-# Reset SFX trigger setelah ditampilkan (biar gak keulang tiap rerun)
-if st.session_state.sfx_trigger:
-    st.session_state.sfx_trigger = ""
 
 
 # ================== FOOTER ==================
