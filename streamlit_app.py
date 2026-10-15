@@ -221,12 +221,8 @@ def reset_semua():
     st.session_state.sisa_pesan = pool
 
 
-# ================== AUDIO ENGINE (nempel di window.parent, anti-rerun) ==================
+# ================== AUDIO ENGINE (nempel di window.parent) ==================
 def inject_audio_engine():
-    """
-    Script ini dipasang SEKALI di window.parent (bukan iframe).
-    Karena nempel di parent, dia gak kehapus walau Streamlit rerun.
-    """
     html = """
     <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;overflow:hidden;}</style></head>
     <body>
@@ -234,58 +230,102 @@ def inject_audio_engine():
         (function() {
             const P = window.parent;
 
-            // Kalau audio engine udah pernah dipasang di parent, skip
+            // =====================================================
+            // Pasang audio engine SEKALI di parent, gak kehapus rerun
+            // =====================================================
             if (P.__loveAudioInstalled) {
+                // Sudah terpasang. Coba resume kalau suspended (auto-play friendly)
+                if (P.__loveCtx && P.__loveCtx.state === 'suspended') {
+                    P.__loveCtx.resume().catch(()=>{});
+                }
+                // Pastikan musik nyala
+                if (P.__loveStartMusicIfNeeded) P.__loveStartMusicIfNeeded();
                 return;
             }
             P.__loveAudioInstalled = true;
 
-            // ============ AUDIO CONTEXT DI PARENT ============
             const AudioCtx = P.AudioContext || P.webkitAudioContext;
             P.__loveCtx = new AudioCtx();
 
             // Volume master
-            P.__musicVolume = 0.9;   // <== musik lebih keras (0-1)
-            P.__sfxVolume = 0.55;
+            P.__musicVolume = 1.0;   // musik lebih keras
+            P.__sfxVolume = 0.7;     // SFX juga dinaikin biar kedengeran jelas
 
             // State musik
             P.__musicRunning = false;
             P.__musicTimer = null;
             P.__musicEnabled = true;
             P.__chordIdx = 0;
+            P.__melodyIdx = 0;
 
-            // ============ HELPER: main nada ============
+            // =====================================================
+            // PLAY NOTE — pakai ADSR biar suara piano-ish, lembut
+            // =====================================================
             function playNote(freq, startTime, duration, volume, type) {
                 const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume();
                 const o = ctx.createOscillator();
                 const g = ctx.createGain();
                 o.type = type || 'sine';
                 o.frequency.value = freq;
+                // attack lembut
                 g.gain.setValueAtTime(0.0001, startTime);
-                g.gain.exponentialRampToValueAtTime(volume, startTime + 0.06);
+                g.gain.exponentialRampToValueAtTime(volume, startTime + 0.12);
+                g.gain.exponentialRampToValueAtTime(volume * 0.5, startTime + duration * 0.4);
                 g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-                o.connect(g);
-                g.connect(ctx.destination);
+                o.connect(g); g.connect(ctx.destination);
                 o.start(startTime);
-                o.stop(startTime + duration + 0.15);
+                o.stop(startTime + duration + 0.2);
             }
 
-            // ============ MUSIK ============
-            // progresi romantis: C - Am - F - G (2 oktaf lebih rendah dari C4)
-            const chordRoots = [261.63, 220.00, 174.61, 196.00];
+            // =====================================================
+            // MUSIK ROMANTIS — Canon in D progression
+            // D - A - Bm - F#m - G - D - G - A
+            // Ini progresi paling "menyentuh hati" di dunia musik klasik
+            // =====================================================
+            const canonChords = [
+                // [bass, chord tones..., melody note]
+                [146.83, 293.66, 369.99, 440.00, 587.33],   // D major
+                [110.00, 277.18, 329.63, 440.00, 554.37],   // A major
+                [123.47, 293.66, 369.99, 493.88, 587.33],   // B minor
+                [92.50,  277.18, 369.99, 440.00, 554.37],   // F# minor
+                [98.00,  293.66, 392.00, 493.88, 587.33],   // G major
+                [146.83, 293.66, 369.99, 440.00, 587.33],   // D major
+                [98.00,  293.66, 392.00, 493.88, 587.33],   // G major
+                [110.00, 277.18, 329.63, 440.00, 554.37],   // A major
+            ];
 
-            function playRomanticChord(rootFreq, atTime) {
-                const dur = 4.2;
-                // chord: root, 3rd, 5th, 7th, 9th
-                const intervals = [1, 1.25, 1.5, 1.875, 2.25];
-                const baseVol = P.__musicVolume;
-                intervals.forEach((ratio, i) => {
-                    const vol = (i === 0 ? 0.09 : (0.065 - i * 0.008)) * baseVol;
-                    playNote(rootFreq * ratio, atTime + i * 0.1, dur, Math.max(vol, 0.02), 'sine');
+            // Melodi Canon in D yang lembut (dalam D major)
+            const melodyNotes = [
+                440.00, 493.88, 554.37, 587.33,  // A4 B4 C#5 D5
+                659.25, 587.33, 554.37, 493.88,  // E5 D5 C#5 B4
+                440.00, 493.88, 554.37, 587.33,  // A4 B4 C#5 D5
+                659.25, 587.33, 554.37, 493.88,  // E5 D5 C#5 B4
+                440.00, 493.88, 554.37, 587.33,  // A4 B4 C#5 D5
+                659.25, 587.33, 554.37, 493.88,  // E5 D5 C#5 B4
+                440.00, 493.88, 554.37, 587.33,  // A4 B4 C#5 D5
+                659.25, 587.33, 493.88, 440.00,  // E5 D5 B4 A4
+            ];
+
+            function playChord(atTime, chord) {
+                const bass = chord[0];
+                const tones = chord.slice(1);
+                const vol = P.__musicVolume;
+
+                // Bass (panjang, lembut)
+                playNote(bass, atTime, 4.5, 0.14 * vol, 'sine');
+
+                // Chord tones (lembut, sedikit reverb feel)
+                tones.forEach((f, i) => {
+                    playNote(f, atTime + i * 0.04, 4.0, 0.075 * vol, 'sine');
                 });
-                // melodi tinggi tipis
-                playNote(rootFreq * 2, atTime + 0.3, dur * 0.75, 0.045 * baseVol, 'triangle');
-                playNote(rootFreq * 3, atTime + 0.6, dur * 0.5, 0.025 * baseVol, 'sine');
+
+                // Melodi tinggi — bikin terasa "menyentuh"
+                const mel = melodyNotes[P.__melodyIdx % melodyNotes.length];
+                playNote(mel, atTime + 0.5, 3.5, 0.11 * vol, 'triangle');
+                playNote(mel * 1.5, atTime + 1.8, 2.0, 0.05 * vol, 'sine');
+
+                P.__melodyIdx++;
             }
 
             function startMusicLoop() {
@@ -294,9 +334,12 @@ def inject_audio_engine():
 
                 function loop() {
                     if (!P.__musicRunning || !P.__musicEnabled) return;
-                    playRomanticChord(chordRoots[P.__chordIdx], P.__loveCtx.currentTime + 0.05);
-                    P.__chordIdx = (P.__chordIdx + 1) % chordRoots.length;
-                    P.__musicTimer = setTimeout(loop, 4100);
+                    const now = P.__loveCtx.currentTime + 0.05;
+                    const chord = canonChords[P.__chordIdx % canonChords.length];
+                    playChord(now, chord);
+                    P.__chordIdx++;
+                    // tiap chord 3.2 detik → tempo Canon in D yang tenang
+                    P.__musicTimer = setTimeout(loop, 3200);
                 }
                 loop();
             }
@@ -306,101 +349,134 @@ def inject_audio_engine():
                 if (P.__musicTimer) { clearTimeout(P.__musicTimer); P.__musicTimer = null; }
             }
 
-            // ============ SFX ============
+            // =====================================================
+            // SFX — semua dibikin lebih "manis" & jelas
+            // =====================================================
             function sfxPop() {
                 const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume();
                 const now = ctx.currentTime;
                 const o = ctx.createOscillator();
                 const g = ctx.createGain();
                 o.type = 'sine';
-                o.frequency.setValueAtTime(400, now);
-                o.frequency.exponentialRampToValueAtTime(1000, now + 0.18);
+                o.frequency.setValueAtTime(440, now);
+                o.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
                 g.gain.setValueAtTime(0.0001, now);
-                g.gain.exponentialRampToValueAtTime(0.45 * P.__sfxVolume, now + 0.02);
-                g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+                g.gain.exponentialRampToValueAtTime(0.5 * P.__sfxVolume, now + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
                 o.connect(g); g.connect(ctx.destination);
-                o.start(now); o.stop(now + 0.55);
+                o.start(now); o.stop(now + 0.65);
             }
 
             function sfxDing() {
                 const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume();
                 const now = ctx.currentTime;
-                [880, 1318.5].forEach((f, i) => {
+                // 3 nada manis: E6, G6, B6 — bikin feel "hati hangat"
+                [1318.51, 1567.98, 1975.53].forEach((f, i) => {
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.type = 'sine';
                     o.frequency.value = f;
-                    const t = now + i * 0.09;
+                    const t = now + i * 0.07;
                     g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.32 * P.__sfxVolume, t + 0.02);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+                    g.gain.exponentialRampToValueAtTime(0.4 * P.__sfxVolume, t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
                     o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 0.8);
+                    o.start(t); o.stop(t + 0.9);
                 });
             }
 
             function sfxChime() {
                 const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume();
                 const now = ctx.currentTime;
-                [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => {
+                // arpeggio naik — D5 F#5 A5 D6 F#6
+                [587.33, 739.99, 880.00, 1174.66, 1479.98].forEach((f, i) => {
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.type = 'sine';
                     o.frequency.value = f;
-                    const t = now + i * 0.13;
+                    const t = now + i * 0.11;
                     g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.30 * P.__sfxVolume, t + 0.03);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.35);
+                    g.gain.exponentialRampToValueAtTime(0.42 * P.__sfxVolume, t + 0.03);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
                     o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 1.4);
+                    o.start(t); o.stop(t + 1.6);
                 });
             }
 
             function sfxReset() {
                 const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume();
                 const now = ctx.currentTime;
-                [660, 440].forEach((f, i) => {
+                [880, 587.33].forEach((f, i) => {
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.type = 'sine';
                     o.frequency.value = f;
                     const t = now + i * 0.1;
                     g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.22 * P.__sfxVolume, t + 0.02);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+                    g.gain.exponentialRampToValueAtTime(0.35 * P.__sfxVolume, t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
                     o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 0.5);
+                    o.start(t); o.stop(t + 0.55);
                 });
             }
 
-            // ============ UNLOCK AUDIO ============
+            // =====================================================
+            // AUTO-PLAY LOGIC
+            // =====================================================
+            // Strategi:
+            //   1) Coba langsung play — kalau browser izinin (user udah pernah interaksi
+            //      di domain Streamlit sebelumnya), musik langsung nyala.
+            //   2) Kalau diblokir, pasang listener click/key/touch SEKALI di parent —
+            //      begitu user gerak dikit, musik langsung nyala.
             function ensureRunning() {
                 if (P.__loveCtx.state === 'suspended') {
-                    P.__loveCtx.resume();
+                    P.__loveCtx.resume().catch(()=>{});
                 }
             }
 
-            function unlock() {
+            P.__loveStartMusicIfNeeded = function() {
                 ensureRunning();
-                setTimeout(() => {
-                    if (P.__loveCtx.state === 'running') {
-                        startMusicLoop();
-                    }
-                }, 60);
-            }
+                if (P.__loveCtx.state === 'running') {
+                    startMusicLoop();
+                } else {
+                    // coba lagi sebentar
+                    setTimeout(() => {
+                        ensureRunning();
+                        if (P.__loveCtx.state === 'running') startMusicLoop();
+                    }, 200);
+                }
+            };
 
-            // Listener di parent document
-            ['click', 'keydown', 'touchstart'].forEach(ev => {
-                P.document.addEventListener(ev, unlock, { capture: true });
+            // Coba auto-play langsung
+            P.__loveStartMusicIfNeeded();
+
+            // Fallback: pasang listener di parent — begitu user interaksi apapun, nyala
+            ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => {
+                P.document.addEventListener(ev, function once() {
+                    P.__loveStartMusicIfNeeded();
+                    // jangan remove, biar kalau keburu suspended bisa dipicu lagi
+                }, { capture: true, passive: true });
             });
 
-            // ============ API BUAT DIPANGGIL DARI IFRAME STREAMLIT ============
+            // Juga di window parent sendiri (kalau user interaksi di luar iframe)
+            P.addEventListener('focus', () => P.__loveStartMusicIfNeeded());
+
+            // =====================================================
+            // API BUAT IFRAME STREAMLIT
+            // =====================================================
             P.__lovePlaySfx = function(name) {
                 ensureRunning();
-                if (name === 'pop') sfxPop();
-                else if (name === 'ding') sfxDing();
-                else if (name === 'chime') sfxChime();
-                else if (name === 'reset') sfxReset();
+                // delay dikit biar audio ctx siap
+                setTimeout(() => {
+                    if (name === 'pop') sfxPop();
+                    else if (name === 'ding') sfxDing();
+                    else if (name === 'chime') sfxChime();
+                    else if (name === 'reset') sfxReset();
+                }, 30);
             };
 
             P.__loveToggleMusic = function() {
@@ -424,9 +500,8 @@ def inject_audio_engine():
     components.html(html, height=0)
 
 
-# ================== TRIGGER SFX ==================
+# ================== TRIGGER SFX (dipanggil setiap rerun kalau ada sfx) ==================
 def trigger_sfx(sfx_name: str):
-    """Panggil SFX dari parent. Dijalankan tiap rerun."""
     if not sfx_name:
         return
     html = f"""
@@ -435,9 +510,16 @@ def trigger_sfx(sfx_name: str):
     <script>
         (function() {{
             const P = window.parent;
-            if (typeof P.__lovePlaySfx === 'function') {{
-                P.__lovePlaySfx('{sfx_name}');
+            function fire() {{
+                if (typeof P.__lovePlaySfx === 'function') {{
+                    P.__lovePlaySfx('{sfx_name}');
+                }} else {{
+                    // engine belum siap, coba lagi
+                    setTimeout(fire, 80);
+                }}
             }}
+            // sedikit delay biar rerun selesai & audio ctx siap
+            setTimeout(fire, 120);
         }})();
     </script>
     </body></html>
@@ -445,7 +527,7 @@ def trigger_sfx(sfx_name: str):
     components.html(html, height=0)
 
 
-# ================== TOMBOL MUSIK (fixed di kanan atas) ==================
+# ================== TOMBOL MUSIK ==================
 def render_music_toggle():
     html = """
     <!DOCTYPE html><html><head>
@@ -499,11 +581,11 @@ def render_music_toggle():
     components.html(html, height=0)
 
 
-# ================== PASANG AUDIO ENGINE (cuma sekali, nempel di parent) ==================
+# ================== PASANG AUDIO ENGINE ==================
 inject_audio_engine()
 render_music_toggle()
 
-# Trigger SFX yang diminta (kalau ada)
+# Trigger SFX yang diminta (kalau ada) — INI YANG BIKIN SFX BUNYI DI SETIAP NEXT
 if st.session_state.sfx:
     trigger_sfx(st.session_state.sfx)
     st.session_state.sfx = ""
@@ -554,7 +636,7 @@ elif st.session_state.step == 1:
     if sisa > 0:
         if st.button("Lanjut, buka kotak berikutnya 🌷"):
             ambil_pesan_baru()
-            st.session_state.sfx = "ding"
+            st.session_state.sfx = "ding"   # <== SFX SETIAP NEXT
             st.rerun()
     else:
         st.markdown(
