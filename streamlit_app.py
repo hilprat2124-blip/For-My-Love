@@ -52,7 +52,7 @@ kalimat_penutup = (
     "Kita tau hubungan tidak selalu mulus, tapi aku janji bakal terus ada buat kamu, "
     "di hari kamu senang, di hari kamu capek, di hari kamu ngerasa sendirian. "
     "Pokoknya, aku cinta banget banget banget sama kamu. "
-    "I LOVE YOU SOOOOOOOOOO MMMMUUUUUUCCCHHHHH SAYANGGGG!!!!!!"
+    "I LOVE YOU SOOOOOOOOOO MMMMUUUUUUCCCHHHHH SAYANGGG!!!!!!"
 )
 
 # ================== CSS ==================
@@ -249,10 +249,9 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE — SFX + MUSIK (MP3 kalau ada, fallback synth)
+# AUDIO ENGINE — pasang AUDIO ELEMENT di parent + unlock audio
 # =====================================================================
 def inject_audio_engine():
-    # Siapkan sumber lagu
     if LAGU_B64:
         lagu_src = f"data:audio/mpeg;base64,{LAGU_B64}"
         pakai_mp3 = True
@@ -263,9 +262,6 @@ def inject_audio_engine():
     html = f"""
     <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;overflow:hidden;}}</style></head>
     <body>
-    <audio id="loveLagu" loop preload="auto" style="display:none;">
-        <source src="{lagu_src}" type="audio/mpeg">
-    </audio>
     <script>
         (function() {{
             const P = window.parent;
@@ -273,18 +269,48 @@ def inject_audio_engine():
             P.__loveInstalled = true;
 
             const PAKAI_MP3 = {str(pakai_mp3).lower()};
+            const LAGU_SRC = "{lagu_src[:100]}...";  // truncated for log
 
+            console.log('[love] Installing audio engine. PAKAI_MP3 =', PAKAI_MP3);
+
+            // ================================================================
+            // 1. BIKIN AUDIO ELEMENT DI PARENT DOCUMENT (bukan di iframe)
+            //    Biar persist & gak ke-reset saat Streamlit rerun
+            // ================================================================
+            let audioEl = P.document.getElementById('loveGlobalMusic');
+            if (!audioEl) {{
+                audioEl = P.document.createElement('audio');
+                audioEl.id = 'loveGlobalMusic';
+                audioEl.loop = true;
+                audioEl.preload = 'auto';
+                audioEl.style.display = 'none';
+                if (PAKAI_MP3) {{
+                    audioEl.src = "data:audio/mpeg;base64,{lagu_src if pakai_mp3 else ''}";
+                }}
+                P.document.body.appendChild(audioEl);
+                console.log('[love] Audio element created in parent.');
+            }}
+
+            // ================================================================
+            // 2. AUDIO CONTEXT DI PARENT
+            // ================================================================
             const AudioCtx = P.AudioContext || P.webkitAudioContext;
-            P.__loveCtx = new AudioCtx();
+            if (!P.__loveCtx) {{
+                P.__loveCtx = new AudioCtx();
+            }}
 
             P.__musicVolume = 0.6;
             P.__sfxVolume = 0.7;
             P.__musicEnabled = true;
+            P.__musicPlaying = false;
             P.__lastSfxId = null;
             P.__synthMusicRunning = false;
             P.__synthMusicTimer = null;
+            P.__audioUnlocked = false;
 
-            // ============ REVERB ============
+            // ================================================================
+            // 3. REVERB
+            // ================================================================
             function makeReverbIR(ctx, duration, decay) {{
                 const rate = ctx.sampleRate;
                 const length = rate * duration;
@@ -298,24 +324,28 @@ def inject_audio_engine():
                 return impulse;
             }}
 
-            const reverbIR = makeReverbIR(P.__loveCtx, 4.5, 2.5);
-            const reverb = P.__loveCtx.createConvolver();
-            reverb.buffer = reverbIR;
+            if (!P.__loveMaster) {{
+                const reverbIR = makeReverbIR(P.__loveCtx, 4.5, 2.5);
+                const reverb = P.__loveCtx.createConvolver();
+                reverb.buffer = reverbIR;
 
-            const reverbGain = P.__loveCtx.createGain();
-            reverbGain.gain.value = 0.45;
+                const reverbGain = P.__loveCtx.createGain();
+                reverbGain.gain.value = 0.45;
 
-            const masterGain = P.__loveCtx.createGain();
-            masterGain.gain.value = 0.7;
+                const masterGain = P.__loveCtx.createGain();
+                masterGain.gain.value = 0.7;
 
-            reverb.connect(reverbGain);
-            reverbGain.connect(masterGain);
-            masterGain.connect(P.__loveCtx.destination);
+                reverb.connect(reverbGain);
+                reverbGain.connect(masterGain);
+                masterGain.connect(P.__loveCtx.destination);
 
-            P.__loveMaster = masterGain;
-            P.__loveReverb = reverb;
+                P.__loveMaster = masterGain;
+                P.__loveReverb = reverb;
+            }}
 
-            // ============ PIANO SYNTH (buat SFX & fallback musik) ============
+            // ================================================================
+            // 4. PIANO SYNTH (untuk SFX & fallback musik)
+            // ================================================================
             function playPiano(freq, startTime, duration, volume) {{
                 const ctx = P.__loveCtx;
                 if (ctx.state === 'suspended') ctx.resume().catch(()=>{{}});
@@ -345,44 +375,21 @@ def inject_audio_engine():
                     const dryGain = ctx.createGain();
                     dryGain.gain.value = 0.55;
                     g.connect(dryGain);
-                    dryGain.connect(masterGain);
+                    dryGain.connect(P.__loveMaster);
 
                     const wetGain = ctx.createGain();
                     wetGain.gain.value = 0.55;
                     g.connect(wetGain);
-                    wetGain.connect(reverb);
+                    wetGain.connect(P.__loveReverb);
 
                     o.start(startTime);
                     o.stop(startTime + duration + 0.1);
                 }});
             }}
 
-            // ============ MUSIK: MP3 atau Fallback SYNTH ============
-            const audioEl = document.getElementById('loveLagu');
-
-            function startMusic() {{
-                if (!P.__musicEnabled) return;
-                if (PAKAI_MP3 && audioEl) {{
-                    audioEl.volume = 0.35;  // volume lembut
-                    audioEl.play().catch(e => {{}});
-                }} else {{
-                    startSynthMusic();
-                }}
-            }}
-
-            function stopMusic() {{
-                if (PAKAI_MP3 && audioEl) {{
-                    audioEl.pause();
-                }} else {{
-                    P.__synthMusicRunning = false;
-                    if (P.__synthMusicTimer) {{
-                        clearTimeout(P.__synthMusicTimer);
-                        P.__synthMusicTimer = null;
-                    }}
-                }}
-            }}
-
-            // ---- Fallback: Synthesized piano ballad ----
+            // ================================================================
+            // 5. SYNTH MUSIC FALLBACK
+            // ================================================================
             const bassLine = [130.81, 164.81, 174.61, 196.00];
             const arpChords = [
                 [261.63, 329.63, 392.00, 493.88],
@@ -428,7 +435,107 @@ def inject_audio_engine():
                 loop();
             }}
 
-            // ============ SFX ============
+            function stopSynthMusic() {{
+                P.__synthMusicRunning = false;
+                if (P.__synthMusicTimer) {{
+                    clearTimeout(P.__synthMusicTimer);
+                    P.__synthMusicTimer = null;
+                }}
+            }}
+
+            // ================================================================
+            // 6. PLAY MUSIC (MP3 atau synth)
+            // ================================================================
+            function tryPlayMusic() {{
+                if (!P.__musicEnabled) return;
+                if (P.__musicPlaying) return;
+
+                if (PAKAI_MP3 && audioEl && audioEl.src) {{
+                    audioEl.volume = 0.35;
+                    const p = audioEl.play();
+                    if (p && p.then) {{
+                        p.then(() => {{
+                            P.__musicPlaying = true;
+                            console.log('[love] ✅ MP3 music playing.');
+                        }}).catch(err => {{
+                            console.warn('[love] MP3 blocked:', err.name, '- will retry on next interaction');
+                            // JANGAN fallback ke synth kalau MP3 ada, cuma belum diizinkan
+                        }});
+                    }}
+                }} else {{
+                    // Fallback: synth music
+                    startSynthMusic();
+                    P.__musicPlaying = true;
+                    console.log('[love] ✅ Synth music playing (no MP3).');
+                }}
+            }}
+
+            function stopMusic() {{
+                if (audioEl) {{
+                    try {{ audioEl.pause(); }} catch(e) {{}}
+                }}
+                stopSynthMusic();
+                P.__musicPlaying = false;
+            }}
+
+            // ================================================================
+            // 7. AUDIO UNLOCK — kunci agar browser izinkan audio
+            // ================================================================
+            function unlockAudio() {{
+                if (P.__audioUnlocked) return;
+
+                // Resume AudioContext
+                if (P.__loveCtx.state === 'suspended') {{
+                    P.__loveCtx.resume().catch(()=>{{}});
+                }}
+
+                // Putar suara silent super pendek untuk "unlock" audio
+                try {{
+                    const buffer = P.__loveCtx.createBuffer(1, 1, 22050);
+                    const src = P.__loveCtx.createBufferSource();
+                    src.buffer = buffer;
+                    src.connect(P.__loveCtx.destination);
+                    src.start(0);
+                }} catch(e) {{}}
+
+                // Coba mainkan MP3 di sini juga
+                if (PAKAI_MP3 && audioEl && audioEl.src) {{
+                    audioEl.volume = 0.35;
+                    audioEl.play().then(() => {{
+                        P.__musicPlaying = true;
+                        console.log('[love] ✅ MP3 started after unlock.');
+                    }}).catch(e => {{
+                        console.log('[love] Unlock play failed:', e.name);
+                    }});
+                }}
+
+                P.__audioUnlocked = true;
+                console.log('[love] Audio unlocked.');
+            }}
+
+            // ================================================================
+            // 8. API UNTUK STREAMLIT
+            // ================================================================
+            P.__loveStartMusicIfNeeded = function() {{
+                tryPlayMusic();
+            }};
+
+            P.__loveToggleMusic = function() {{
+                if (P.__musicEnabled) {{
+                    P.__musicEnabled = false;
+                    stopMusic();
+                }} else {{
+                    P.__musicEnabled = true;
+                    tryPlayMusic();
+                }}
+                return P.__musicEnabled;
+            }};
+
+            P.__loveMusicEnabled = function() {{ return P.__musicEnabled; }};
+
+            // ================================================================
+            // 9. SFX (pakai piano synth)
+            // ================================================================
             function sfxPop() {{
                 const now = P.__loveCtx.currentTime;
                 playPiano(880, now, 1.0, 0.45 * P.__sfxVolume);
@@ -453,10 +560,12 @@ def inject_audio_engine():
                 }});
             }}
 
-            // ============ CORE: Play SFX — pakai sfx_id unik ============
             P.__lovePlaySfx = function(name, id) {{
                 if (id !== undefined && id === P.__lastSfxId) return;
                 P.__lastSfxId = id;
+
+                // PASTIKAN audio unlocked setiap kali SFX dipanggil
+                unlockAudio();
 
                 if (P.__loveCtx.state === 'suspended') {{
                     P.__loveCtx.resume().then(() => fireSfx(name)).catch(() => fireSfx(name));
@@ -471,53 +580,63 @@ def inject_audio_engine():
                     else if (name === 'ding') sfxDing();
                     else if (name === 'chime') sfxChime();
                     else if (name === 'reset') sfxReset();
-                }} catch(e) {{}}
+                }} catch(e) {{ console.error('[love] SFX error:', e); }}
             }}
 
-            // Fallback postMessage
+            // Listen postMessage (fallback)
             P.addEventListener('message', function(ev) {{
                 const data = ev.data;
-                if (data && data.__loveSfx) P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
+                if (data && data.__loveSfx) {{
+                    unlockAudio();
+                    P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
+                }}
                 if (data && data.__loveFireworks && typeof P.__loveFireworksFullScreen === 'function') {{
                     P.__loveFireworksFullScreen();
                 }}
             }});
 
-            function ensureRunning() {{
-                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{{}});
-            }}
+            // ================================================================
+            // 10. AUTO-START MUSIC
+            // Kunci: coba play berkali-kali di setiap event interaksi
+            // ================================================================
+            // Coba langsung (kadang berhasil kalau user udah pernah interaksi)
+            tryPlayMusic();
 
-            P.__loveStartMusicIfNeeded = function() {{
-                ensureRunning();
-                if (P.__loveCtx.state === 'running') {{
-                    startMusic();
-                }} else {{
-                    setTimeout(() => {{
-                        ensureRunning();
-                        if (P.__loveCtx.state === 'running') startMusic();
-                    }}, 250);
-                }}
-            }};
-
-            P.__loveStartMusicIfNeeded();
-
-            ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => {{
-                P.document.addEventListener(ev, () => P.__loveStartMusicIfNeeded(),
-                    {{ capture: true, passive: true }});
+            // Setiap interaksi user → coba unlock + play music
+            const evList = ['click','keydown','touchstart','mousedown','pointerdown','scroll','mousemove'];
+            evList.forEach(ev => {{
+                P.document.addEventListener(ev, function() {{
+                    unlockAudio();
+                    if (!P.__musicPlaying) tryPlayMusic();
+                }}, {{ capture: true, passive: true }});
+                // Listener juga di dalam iframe
+                document.addEventListener(ev, function() {{
+                    unlockAudio();
+                    if (!P.__musicPlaying) tryPlayMusic();
+                }}, {{ capture: true, passive: true }});
             }});
-            P.addEventListener('focus', () => P.__loveStartMusicIfNeeded());
 
-            P.__loveToggleMusic = function() {{
-                P.__musicEnabled = !P.__musicEnabled;
-                if (P.__musicEnabled) {{
-                    ensureRunning();
-                    startMusic();
-                }} else {{
-                    stopMusic();
+            // Retry periodik: coba play tiap 1 detik sampai berhasil (max 30 detik)
+            let retryCount = 0;
+            const retryInterval = setInterval(() => {{
+                retryCount++;
+                if (P.__musicPlaying) {{
+                    clearInterval(retryInterval);
+                    return;
                 }}
-                return P.__musicEnabled;
-            }};
-            P.__loveMusicEnabled = function() {{ return P.__musicEnabled; }};
+                if (retryCount > 30) {{
+                    clearInterval(retryInterval);
+                    console.log('[love] Give up auto-play after 30s. Waiting for user interaction.');
+                    return;
+                }}
+                if (P.__loveCtx.state === 'running') {{
+                    tryPlayMusic();
+                }} else {{
+                    P.__loveCtx.resume().catch(()=>{{}});
+                }}
+            }}, 1000);
+
+            console.log('[love] Audio engine ready. Waiting for user interaction or auto-play success.');
         }})();
     </script>
     </body></html>
@@ -526,7 +645,7 @@ def inject_audio_engine():
 
 
 # =====================================================================
-# EFEK GLOBAL: Petal, sparkle, love jatuh di SEMUA halaman
+# EFEK GLOBAL
 # =====================================================================
 def inject_global_effects():
     html = """
@@ -705,7 +824,7 @@ def inject_global_effects():
 
 
 # =====================================================================
-# TRIGGER SFX — pakai sfx_id unik biar gak pernah skip
+# TRIGGER SFX
 # =====================================================================
 def trigger_sfx(sfx_name: str, sfx_id: int):
     if not sfx_name:
@@ -814,12 +933,11 @@ def render_music_toggle():
     components.html(html, height=0)
 
 
-# ================== PASANG AUDIO + EFEK ==================
+# ================== PASANG SEMUA ==================
 inject_audio_engine()
 inject_global_effects()
 render_music_toggle()
 
-# ================== TRIGGER SFX ==================
 if st.session_state.sfx:
     trigger_sfx(st.session_state.sfx, st.session_state.sfx_id)
     st.session_state.sfx = ""
