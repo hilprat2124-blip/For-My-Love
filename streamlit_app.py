@@ -4,135 +4,207 @@ import random
 
 # ================== KONFIG ==================
 st.set_page_config(
-    page_title="buat kamu 💕",
-    page_icon="🎀",
+    page_title="Untuk Kamu",
+    page_icon="🌸",
     layout="centered"
 )
 
-# ================== DATA KATA SEMANGAT NUGAS ==================
+# ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
-    "dikit lagi selesai kok, jangan nyerah dulu ya 🥺",
-    "skripsi/tugasnya bakal kangen kamu kalo gak dikerjain wkwk 📚",
-    "capek itu wajar, tapi kamu lebih kuat dari capeknya 💪",
-    "nugas sambil dengerin lagu favorit, dijamin lebih enak 🎧",
-    "kalo udah selesai, aku traktir kamu es krim 🍦",
-    "dunia butuh orang pinter, jadi jangan males nugas ya 😤",
-    "istirahat boleh, nyerah jangan ya sayang 💗",
-    "kamu tuh hebat, aku aja bangga liat kamu berjuang 🌟",
-    "semangat! nanti aku elus-elus kepala kamu (bayangin aja dulu) 🤲",
-    "dikit lagi, dikit lagi... janji deh setelah ini kita have fun 🎉",
-    "aku percaya kamu bisa, jadi kamu harus percaya juga ✨",
-    "jangan lupa makan & minum, jangan sampe tumbang 🍜",
-    "nugasnya pelan-pelan aja, gak usah buru-buru 🐢",
-    "kamu tuh pinter, cuma kadang lupa aja kalo kamu pinter 😆",
-    "yang sabar ya, semua ini bakal worth it kok 🥰",
-    "kalo bingung, tarik napas, terus mikir lagi. kamu bisa! 💭",
+    "Dikit lagi selesai kok, jangan nyerah dulu ya.",
+    "Skripsi atau tugasnya bakal kangen kamu kalau gak dikerjain.",
+    "Capek itu wajar. Kamu lebih kuat dari capeknya.",
+    "Coba nugas sambil dengerin lagu favorit, dijamin lebih ringan.",
+    "Kalau udah selesai, aku traktir kamu es krim.",
+    "Dunia butuh orang pinter. Jadi jangan males ya.",
+    "Istirahat boleh, nyerah jangan.",
+    "Kamu itu hebat. Aku aja bangga liat kamu berjuang.",
+    "Semangat. Nanti aku elus-elus kepala kamu, bayangin aja dulu.",
+    "Dikit lagi. Janji, setelah ini kita have fun.",
+    "Aku percaya kamu bisa. Jadi kamu harus percaya juga.",
+    "Jangan lupa makan dan minum, jangan sampai tumbang.",
+    "Pelan-pelan aja. Gak usah buru-buru.",
+    "Kamu tuh pinter. Kadang aja kamu lupa kalau kamu pinter.",
+    "Sabar ya. Semua ini bakal worth it kok.",
+    "Kalau bingung, tarik napas. Terus mikir lagi. Kamu bisa.",
 ]
 
-# ================== KALIMAT POP SURPRISE ==================
+# ================== PARAGRAF CINTA ==================
 kalimat_penutup = (
-    "jujur ya, aku tuh gak tau harus gimana ngejelasin ini semua ke kamu. "
-    "tiap hari rasanya aku makin sayang, makin cinta, makin pengen kamu bahagia terus. "
-    "kamu itu bukan cuma pacar, kamu udah jadi tempat aku pulang, tempat aku cerita hal-hal random, "
+    "Jujur ya, aku gak tau harus gimana ngejelasin ini semua ke kamu. "
+    "Tiap hari rasanya aku makin sayang, makin cinta, makin pengen kamu bahagia terus. "
+    "Kamu itu bukan cuma pacar. Kamu udah jadi tempat aku pulang, tempat aku cerita hal-hal random, "
     "tempat aku jadi diri aku sendiri tanpa takut dihakimi. "
-    "makasih ya udah bertahan, udah sabar, udah sayang sama aku yang kadang nyebelin ini. "
-    "aku gak janji bisa jadi sempurna, tapi aku janji bakal terus ada buat kamu — "
-    "di hari kamu seneng, di hari kamu capek, di hari kamu ngerasa sendirian. "
-    "pokoknya, aku cinta banget sama kamu. banget. serius. gak boong. 💖"
+    "Makasih ya udah bertahan, udah sabar, udah sayang sama aku yang kadang nyebelin ini. "
+    "Aku gak janji bisa jadi sempurna, tapi aku janji bakal terus ada buat kamu, "
+    "di hari kamu senang, di hari kamu capek, di hari kamu ngerasa sendirian. "
+    "Pokoknya, aku cinta banget sama kamu. Banget. Serius. Gak boong."
 )
 
-# ================== CSS GIRLY LUCU ==================
+# ================== CSS ==================
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Nunito:wght@400;600;700&display=swap');
+
     .stApp {
-        background: linear-gradient(135deg, #ffe0ec 0%, #ffc9dd 100%);
+        background: linear-gradient(160deg, #ffe9f0 0%, #ffd9e6 55%, #ffc7db 100%);
+        font-family: 'Nunito', sans-serif;
     }
 
     #MainMenu, footer, header {visibility: hidden;}
 
+    /* ====== Judul ====== */
     .judul {
         text-align: center;
-        font-family: 'Comic Sans MS', cursive;
-        color: #ff4d88;
-        font-size: 2em;
-        margin-bottom: 5px;
+        font-family: 'Caveat', cursive;
+        color: #d6336c;
+        font-size: 2.6em;
+        margin-bottom: 0;
+        letter-spacing: 0.5px;
+        animation: fadeDown 0.9s ease-out;
     }
 
     .subjudul {
         text-align: center;
-        color: #ff69b4;
-        font-size: 1em;
-        margin-bottom: 25px;
+        color: #e0709a;
+        font-size: 0.98em;
+        margin-top: 0;
+        margin-bottom: 28px;
         font-style: italic;
+        animation: fadeDown 1.2s ease-out;
     }
 
-    /* Kotak misteri */
+    @keyframes fadeDown {
+        from { opacity: 0; transform: translateY(-12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ====== Kotak misteri ====== */
+    .box-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 20px 0 30px 0;
+        animation: floatY 3.2s ease-in-out infinite;
+    }
+
+    @keyframes floatY {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+
     .box {
-        background: linear-gradient(135deg, #ff9ec7, #ff69b4);
-        border-radius: 20px;
-        padding: 40px 20px;
-        text-align: center;
-        color: white;
-        font-size: 3em;
-        cursor: pointer;
-        box-shadow: 0 10px 25px rgba(255, 105, 180, 0.5);
-        transition: transform 0.2s;
-        border: 4px dashed #fff;
-        margin: 10px 0;
+        width: 170px;
+        height: 170px;
+        background: linear-gradient(145deg, #ffb3cc, #ff7fae);
+        border-radius: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4em;
+        box-shadow: 0 18px 40px rgba(214, 51, 108, 0.35),
+                    inset 0 -6px 12px rgba(255, 255, 255, 0.4);
+        border: 3px solid rgba(255, 255, 255, 0.7);
+        position: relative;
+        animation: shake 2.6s ease-in-out infinite;
     }
 
-    .box:hover {
-        transform: scale(1.05) rotate(-2deg);
+    @keyframes shake {
+        0%, 100% { transform: rotate(0deg); }
+        15% { transform: rotate(-4deg); }
+        30% { transform: rotate(4deg); }
+        45% { transform: rotate(-3deg); }
+        60% { transform: rotate(0deg); }
     }
 
-    /* Card pesan */
+    /* ====== Card pesan ====== */
     .pesan-card {
-        background: rgba(255, 255, 255, 0.95);
-        border-radius: 20px;
-        padding: 30px 25px;
-        margin: 20px 0;
-        border: 3px dotted #ff69b4;
+        background: rgba(255, 255, 255, 0.96);
+        border-radius: 22px;
+        padding: 34px 28px;
+        margin: 18px auto;
+        max-width: 560px;
         text-align: center;
-        color: #d63384;
-        font-size: 1.15em;
+        color: #b02a5b;
+        font-size: 1.18em;
         font-weight: 600;
-        line-height: 1.6;
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.4);
+        line-height: 1.75;
+        box-shadow: 0 12px 32px rgba(214, 51, 108, 0.15),
+                    0 0 0 3px rgba(255, 179, 204, 0.6);
+        position: relative;
+        animation: cardIn 0.7s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
+    .pesan-card::before {
+        content: "❝";
+        position: absolute;
+        top: 6px;
+        left: 18px;
+        font-size: 2.2em;
+        color: #ffb3cc;
+        font-family: Georgia, serif;
+        line-height: 1;
+    }
+
+    @keyframes cardIn {
+        0% {
+            opacity: 0;
+            transform: translateY(18px) scale(0.94);
+            filter: blur(4px);
+        }
+        60% {
+            filter: blur(0);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    /* ====== Counter ====== */
     .counter {
         text-align: center;
-        color: #ff69b4;
-        font-size: 0.9em;
+        color: #d6336c;
+        font-size: 0.88em;
         font-style: italic;
-        margin-top: 10px;
+        margin-top: 12px;
+        opacity: 0.85;
+        animation: fadeDown 0.9s ease-out;
     }
 
-    /* Tombol */
+    /* ====== Tombol ====== */
     .stButton > button {
-        background: linear-gradient(135deg, #ff69b4, #ff1493) !important;
-        color: white !important;
+        background: linear-gradient(135deg, #ff7fae, #d6336c) !important;
+        color: #fff !important;
         border: none !important;
-        padding: 14px 30px !important;
-        border-radius: 50px !important;
-        font-size: 1.05em !important;
+        padding: 14px 26px !important;
+        border-radius: 999px !important;
+        font-size: 1.02em !important;
         font-weight: 700 !important;
-        box-shadow: 0 6px 18px rgba(255, 105, 180, 0.5) !important;
-        transition: all 0.3s !important;
+        letter-spacing: 0.3px !important;
+        box-shadow: 0 8px 22px rgba(214, 51, 108, 0.35) !important;
+        transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1) !important;
         width: 100% !important;
+        font-family: 'Nunito', sans-serif !important;
     }
 
     .stButton > button:hover {
-        transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 10px 22px rgba(255, 105, 180, 0.7) !important;
+        transform: translateY(-3px) scale(1.015);
+        box-shadow: 0 14px 30px rgba(214, 51, 108, 0.5) !important;
+        background: linear-gradient(135deg, #ff8fbb, #e03d7a) !important;
     }
 
+    .stButton > button:active {
+        transform: translateY(-1px) scale(0.99);
+    }
+
+    /* ====== Footer ====== */
     .footer {
         text-align: center;
-        color: #ff69b4;
+        color: #d6336c;
         font-size: 0.85em;
-        margin-top: 30px;
-        opacity: 0.8;
+        margin-top: 32px;
+        opacity: 0.7;
+        font-style: italic;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -140,67 +212,65 @@ st.markdown("""
 
 # ================== SESSION STATE ==================
 if "step" not in st.session_state:
-    st.session_state.step = 0  # 0 = belum mulai, 1 = lagi buka kotak, 99 = surprise
+    st.session_state.step = 0
 
 if "pesan_sekarang" not in st.session_state:
     st.session_state.pesan_sekarang = ""
 
-if "riwayat" not in st.session_state:
-    st.session_state.riwayat = []
-
 if "sisa_pesan" not in st.session_state:
-    # acak urutan kata semangat biar gak repetitif
     pool = kata_nugas.copy()
     random.shuffle(pool)
     st.session_state.sisa_pesan = pool
 
+if "key_pesan" not in st.session_state:
+    st.session_state.key_pesan = 0  # buat trigger animasi baru
 
-# ================== FUNGSI ==================
+
 def ambil_pesan_baru():
     if not st.session_state.sisa_pesan:
-        # kalau udah habis, trigger surprise
         st.session_state.step = 99
         return
-    pesan = st.session_state.sisa_pesan.pop()
-    st.session_state.pesan_sekarang = pesan
-    st.session_state.riwayat.append(pesan)
+    st.session_state.pesan_sekarang = st.session_state.sisa_pesan.pop()
+    st.session_state.key_pesan += 1
 
 
 def reset_semua():
     st.session_state.step = 0
     st.session_state.pesan_sekarang = ""
-    st.session_state.riwayat = []
+    st.session_state.key_pesan = 0
     pool = kata_nugas.copy()
     random.shuffle(pool)
     st.session_state.sisa_pesan = pool
 
 
-# ================== HALAMAN: AWAL ==================
+# ================== HALAMAN 0: AWAL ==================
 if st.session_state.step == 0:
-    st.markdown('<div class="judul">🎀 hai kamu 🎀</div>', unsafe_allow_html=True)
+    st.markdown('<div class="judul">Hai, kamu 🌸</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="subjudul">aku titipin sesuatu di kotak-kotak ini... '
-        'buka satu-satu ya, jangan nyolong buka semua 😤💕</div>',
+        '<div class="subjudul">aku nitipin sesuatu di kotak ini. '
+        'buka pelan-pelan ya, jangan sekaligus.</div>',
         unsafe_allow_html=True
     )
 
     st.markdown(
-        '<div class="box">🎁</div>',
+        '<div class="box-wrap"><div class="box">🎁</div></div>',
         unsafe_allow_html=True
     )
 
-    if st.button("buka kotaknya 💌"):
+    if st.button("Buka kotaknya 💌"):
         st.session_state.step = 1
         ambil_pesan_baru()
         st.rerun()
 
 
-# ================== HALAMAN: BUKA KOTAK ==================
+# ================== HALAMAN 1: BUKA KOTAK ==================
 elif st.session_state.step == 1:
-    st.markdown('<div class="judul">💌 pesan buat kamu 💌</div>', unsafe_allow_html=True)
+    st.markdown('<div class="judul">Sebuah pesan untukmu</div>', unsafe_allow_html=True)
 
+    # key berubah setiap pesan baru → animasi cardIn dipicu ulang
     st.markdown(
-        f'<div class="pesan-card">{st.session_state.pesan_sekarang}</div>',
+        f'<div class="pesan-card" key="p{st.session_state.key_pesan}">'
+        f'{st.session_state.pesan_sekarang}</div>',
         unsafe_allow_html=True
     )
 
@@ -209,44 +279,47 @@ elif st.session_state.step == 1:
     sudah = total - sisa
 
     st.markdown(
-        f'<div class="counter">kotak yang udah kamu buka: {sudah} / {total} 🎁</div>',
+        f'<div class="counter">kotak yang sudah kamu buka — {sudah} dari {total} 🌸</div>',
         unsafe_allow_html=True
     )
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
     if sisa > 0:
-        if st.button("lanjut buka kotak lagi 🎀"):
+        if st.button("Lanjut, buka kotak berikutnya 🌷"):
             ambil_pesan_baru()
             st.rerun()
     else:
         st.markdown(
-            '<div class="counter">kotaknya udah abis nih... '
-            'tapi ada satu hal lagi buat kamu 👀</div>',
+            '<div class="counter">kotaknya sudah habis... '
+            'tapi masih ada satu hal lagi untukmu</div>',
             unsafe_allow_html=True
         )
-        if st.button("buka yang terakhir ✨"):
+        if st.button("Buka yang terakhir ✨"):
             st.session_state.step = 99
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 ulang dari awal"):
+    if st.button("🔄 Ulang dari awal"):
         reset_semua()
         st.rerun()
 
 
-# ================== HALAMAN: SURPRISE ==================
+# ================== HALAMAN 99: SURPRISE ==================
 elif st.session_state.step == 99:
 
-    # ---- HTML + CSS + JS untuk sparkle love + fireworks ----
     html_surprise = f"""
     <!DOCTYPE html>
     <html>
     <head>
     <style>
-        body {{
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Nunito:wght@400;600;700&display=swap');
+
+        html, body {{
             margin: 0;
             padding: 0;
             background: transparent;
-            font-family: 'Comic Sans MS', cursive;
+            font-family: 'Nunito', sans-serif;
             overflow: hidden;
         }}
 
@@ -259,68 +332,111 @@ elif st.session_state.step == 99:
             pointer-events: none;
         }}
 
-        .love-sparkle {{
+        /* Partikel love halus, jatuh perlahan */
+        .petal {{
             position: fixed;
-            font-size: 24px;
-            animation: sparkleFloat 3s ease-in-out infinite;
-            z-index: 2;
+            top: -30px;
+            font-size: 18px;
+            opacity: 0;
+            animation: petalFall linear forwards;
+            z-index: 1;
             pointer-events: none;
         }}
 
-        @keyframes sparkleFloat {{
-            0% {{ transform: translateY(0) scale(1); opacity: 1; }}
-            50% {{ transform: translateY(-15px) scale(1.3); opacity: 0.7; }}
-            100% {{ transform: translateY(0) scale(1); opacity: 1; }}
+        @keyframes petalFall {{
+            0% {{
+                opacity: 0;
+                transform: translateY(-20px) rotate(0deg);
+            }}
+            10% {{ opacity: 0.9; }}
+            90% {{ opacity: 0.9; }}
+            100% {{
+                opacity: 0;
+                transform: translateY(105vh) rotate(360deg);
+            }}
         }}
 
+        /* Konten utama */
         .konten {{
             position: relative;
             z-index: 3;
-            background: rgba(255, 255, 255, 0.94);
-            border-radius: 25px;
-            padding: 35px 30px;
-            margin: 20px auto;
-            max-width: 650px;
-            border: 4px dashed #ff69b4;
-            box-shadow: 0 15px 40px rgba(255, 105, 180, 0.5);
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 26px;
+            padding: 40px 34px;
+            margin: 24px auto;
+            max-width: 640px;
+            box-shadow: 0 22px 55px rgba(214, 51, 108, 0.28),
+                        0 0 0 3px rgba(255, 179, 204, 0.55);
             text-align: center;
-            animation: popIn 0.8s ease-out;
+            animation: popIn 1.1s cubic-bezier(0.22, 1, 0.36, 1);
         }}
 
         @keyframes popIn {{
-            0% {{ transform: scale(0.5); opacity: 0; }}
-            70% {{ transform: scale(1.05); }}
-            100% {{ transform: scale(1); opacity: 1; }}
+            0% {{
+                opacity: 0;
+                transform: scale(0.82) translateY(20px);
+                filter: blur(6px);
+            }}
+            60% {{ filter: blur(0); }}
+            100% {{
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }}
         }}
 
         .judul-surprise {{
-            font-size: 1.8em;
-            color: #ff1493;
-            margin-bottom: 15px;
-            animation: heartbeat 1.5s infinite;
+            font-family: 'Caveat', cursive;
+            font-size: 2.4em;
+            color: #d6336c;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+            animation: heartbeat 2.4s ease-in-out infinite;
         }}
 
         @keyframes heartbeat {{
             0%, 100% {{ transform: scale(1); }}
-            25% {{ transform: scale(1.1); }}
-            50% {{ transform: scale(1); }}
+            20% {{ transform: scale(1.06); }}
+            40% {{ transform: scale(1); }}
+            60% {{ transform: scale(1.04); }}
+        }}
+
+        .garis {{
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #ff7fae, transparent);
+            margin: 14px auto 22px auto;
+            border-radius: 3px;
+            animation: fadeIn 1.6s ease-out;
+        }}
+
+        @keyframes fadeIn {{
+            from {{ opacity: 0; width: 0; }}
+            to {{ opacity: 1; width: 60px; }}
         }}
 
         .paragraf {{
-            color: #c71585;
-            font-size: 1.05em;
-            line-height: 1.8;
+            color: #a1255a;
+            font-size: 1.06em;
+            line-height: 1.95;
             text-align: left;
-            padding: 10px 5px;
-            font-weight: 600;
+            font-weight: 500;
+            opacity: 0;
+            animation: fadeUp 1.4s ease-out 0.6s forwards;
+        }}
+
+        @keyframes fadeUp {{
+            from {{ opacity: 0; transform: translateY(14px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
         }}
 
         .ttd {{
-            margin-top: 25px;
-            color: #ff69b4;
-            font-size: 1.1em;
-            font-style: italic;
+            margin-top: 28px;
+            color: #d6336c;
+            font-family: 'Caveat', cursive;
+            font-size: 1.5em;
             text-align: right;
+            opacity: 0;
+            animation: fadeUp 1.4s ease-out 1.6s forwards;
         }}
     </style>
     </head>
@@ -329,28 +445,29 @@ elif st.session_state.step == 99:
     <canvas id="fireworks"></canvas>
 
     <div class="konten">
-        <div class="judul-surprise">💖 surprise 💖</div>
+        <div class="judul-surprise">Untuk kamu 🌸</div>
+        <div class="garis"></div>
         <div class="paragraf">{kalimat_penutup}</div>
-        <div class="ttd">— dari aku, yang sayang banget sama kamu 💗</div>
+        <div class="ttd">— dari aku, yang sayang banget sama kamu</div>
     </div>
 
     <script>
-        // ===== SPARKLE LOVE BERJATUHAN =====
-        const loveEmojis = ['💖','💕','✨','💗','🩷','💞','🌸','⭐'];
-        function spawnLove() {{
+        // ===== PETAL / LOVE JATUH HALUS =====
+        const petals = ['🌸','🌷','💗','✨','🩷'];
+        function spawnPetal() {{
             const el = document.createElement('div');
-            el.className = 'love-sparkle';
-            el.textContent = loveEmojis[Math.floor(Math.random() * loveEmojis.length)];
+            el.className = 'petal';
+            el.textContent = petals[Math.floor(Math.random() * petals.length)];
             el.style.left = Math.random() * 100 + 'vw';
-            el.style.top = Math.random() * 100 + 'vh';
-            el.style.fontSize = (Math.random() * 20 + 16) + 'px';
-            el.style.animationDuration = (Math.random() * 2 + 2) + 's';
+            el.style.fontSize = (Math.random() * 8 + 14) + 'px';
+            const dur = Math.random() * 5 + 7; // 7–12 detik, jatuh pelan
+            el.style.animationDuration = dur + 's';
             document.body.appendChild(el);
-            setTimeout(() => el.remove(), 3500);
+            setTimeout(() => el.remove(), dur * 1000 + 500);
         }}
-        setInterval(spawnLove, 200);
+        setInterval(spawnPetal, 700);
 
-        // ===== FIREWORKS =====
+        // ===== FIREWORKS ELEGAN (pink & gold) =====
         const canvas = document.getElementById('fireworks');
         const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
@@ -362,47 +479,55 @@ elif st.session_state.step == 99:
         }});
 
         const particles = [];
-        const colors = ['#ff69b4','#ff1493','#ffb6c1','#ff85c1','#fff0f5','#ff4d88'];
+        // palet pink-gold-putih, bukan pelangi norak
+        const colors = [
+            '#ff7fae', '#d6336c', '#ffb3cc',
+            '#ffd9a0', '#ffe8b0', '#ffffff',
+            '#f9a8c9', '#e8879f'
+        ];
 
         function createFirework(x, y) {{
-            const count = 40 + Math.floor(Math.random() * 30);
+            const count = 45 + Math.floor(Math.random() * 25);
+            const baseHue = colors[Math.floor(Math.random() * colors.length)];
             for (let i = 0; i < count; i++) {{
-                const angle = (Math.PI * 2 * i) / count;
-                const speed = Math.random() * 5 + 2;
+                const angle = (Math.PI * 2 * i) / count + Math.random() * 0.15;
+                const speed = Math.random() * 4.5 + 1.8;
                 particles.push({{
                     x: x,
                     y: y,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
                     life: 1,
-                    color: colors[Math.floor(Math.random() * colors.length)],
-                    size: Math.random() * 3 + 2
+                    decay: 0.012 + Math.random() * 0.008,
+                    color: Math.random() < 0.7 ? baseHue : colors[Math.floor(Math.random()*colors.length)],
+                    size: Math.random() * 2.2 + 1.4
                 }});
             }}
         }}
 
         function animate() {{
-            ctx.fillStyle = 'rgba(255, 224, 236, 0.15)';
+            // trail halus, bukan kotak hitam
+            ctx.fillStyle = 'rgba(255, 233, 240, 0.18)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             for (let i = particles.length - 1; i >= 0; i--) {{
                 const p = particles[i];
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vy += 0.06;
-                p.vx *= 0.98;
-                p.vy *= 0.98;
-                p.life -= 0.015;
+                p.vy += 0.05;
+                p.vx *= 0.985;
+                p.vy *= 0.985;
+                p.life -= p.decay;
 
                 if (p.life <= 0) {{
                     particles.splice(i, 1);
                     continue;
                 }}
 
-                ctx.globalAlpha = p.life;
+                ctx.globalAlpha = Math.max(p.life, 0);
                 ctx.fillStyle = p.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
                 ctx.fill();
             }}
             ctx.globalAlpha = 1;
@@ -411,34 +536,34 @@ elif st.session_state.step == 99:
 
         animate();
 
-        // trigger fireworks berkala
+        // interval lebih jarang, biar elegan bukan rame
         setInterval(() => {{
             createFirework(
                 Math.random() * canvas.width,
-                Math.random() * canvas.height * 0.6
+                Math.random() * canvas.height * 0.6 + 40
             );
-        }}, 700);
+        }}, 1400);
 
-        // ledakan awal pas halaman muncul
-        setTimeout(() => createFirework(canvas.width/2, canvas.height/3), 300);
-        setTimeout(() => createFirework(canvas.width*0.3, canvas.height*0.5), 700);
-        setTimeout(() => createFirework(canvas.width*0.7, canvas.height*0.4), 1100);
+        // opening burst
+        setTimeout(() => createFirework(canvas.width * 0.5, canvas.height * 0.28), 400);
+        setTimeout(() => createFirework(canvas.width * 0.28, canvas.height * 0.45), 900);
+        setTimeout(() => createFirework(canvas.width * 0.72, canvas.height * 0.38), 1400);
     </script>
 
     </body>
     </html>
     """
 
-    components.html(html_surprise, height=800, scrolling=False)
+    components.html(html_surprise, height=780, scrolling=False)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 ulang dari awal ya"):
+    if st.button("🔄 Ulang dari awal ya"):
         reset_semua()
         st.rerun()
 
 
 # ================== FOOTER ==================
 st.markdown(
-    '<div class="footer">dibuat sambil mikirin kamu terus 🩷</div>',
+    '<div class="footer">dibuat sambil mikirin kamu terus</div>',
     unsafe_allow_html=True
 )
