@@ -222,11 +222,7 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE — dipasang SEKALI di window.parent, punya:
-#   - AudioContext permanent
-#   - Background music loop (River Flows in You style)
-#   - SFX generator
-#   - postMessage listener untuk terima trigger dari iframe Streamlit
+# AUDIO ENGINE — PIANO SUITE (harmonic synthesis + reverb)
 # =====================================================================
 def inject_audio_engine():
     html = """
@@ -235,10 +231,8 @@ def inject_audio_engine():
     <script>
         (function() {
             const P = window.parent;
-
-            // ============ INSTALL SEKALI ============
-            if (P.__loveAudioV3) return;
-            P.__loveAudioV3 = true;
+            if (P.__lovePianoV1) return;
+            P.__lovePianoV1 = true;
 
             const AudioCtx = P.AudioContext || P.webkitAudioContext;
             P.__loveCtx = new AudioCtx();
@@ -248,99 +242,127 @@ def inject_audio_engine():
             P.__musicRunning = false;
             P.__musicTimer = null;
             P.__musicEnabled = true;
-            P.__chordIdx = 0;
-            P.__melodyIdx = 0;
             P.__lastSfxAt = 0;
 
-            // ============ HELPER: main nada dengan envelope piano ============
-            function playNote(freq, startTime, duration, volume, type) {
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
-                const o = ctx.createOscillator();
-                const g = ctx.createGain();
-                o.type = type || 'sine';
-                o.frequency.value = freq;
-
-                // Envelope piano: attack cepat, decay lembut, sustain pelan
-                g.gain.setValueAtTime(0.0001, startTime);
-                g.gain.exponentialRampToValueAtTime(volume, startTime + 0.08);
-                g.gain.exponentialRampToValueAtTime(volume * 0.55, startTime + duration * 0.35);
-                g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-                o.connect(g);
-                g.connect(ctx.destination);
-                o.start(startTime);
-                o.stop(startTime + duration + 0.15);
+            // Reverb sederhana pakai ConvolverNode
+            function makeReverbIR(ctx, duration, decay) {
+                const rate = ctx.sampleRate;
+                const length = rate * duration;
+                const impulse = ctx.createBuffer(2, length, rate);
+                for (let ch = 0; ch < 2; ch++) {
+                    const data = impulse.getChannelData(ch);
+                    for (let i = 0; i < length; i++) {
+                        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+                    }
+                }
+                return impulse;
             }
 
-            // ============ MUSIK: River Flows in You style ============
-            // Progresi: Am - F - C - G (sangat menyentuh, romantis, hangat)
-            // Bass note + chord tones + melodi tinggi yang mengalir seperti sungai
-            const chords = [
-                // [bass, tone1, tone2, tone3]
-                [110.00, 261.63, 329.63, 440.00],  // Am  (A2 C4 E4 A4)
-                [87.31,  261.63, 349.23, 440.00],  // F   (F2 C4 F4 A4)
-                [130.81, 261.63, 329.63, 392.00],  // C   (C3 C4 E4 G4)
-                [98.00,  246.94, 293.66, 392.00],  // G   (G2 B3 D4 G4)
-            ];
+            const reverbIR = makeReverbIR(P.__loveCtx, 3.5, 3);
+            const reverb = P.__loveCtx.createConvolver();
+            reverb.buffer = reverbIR;
 
-            // Melodi utama — meniru feel "River Flows in You"
-            // Nada mengalir naik-turun dengan lembut
+            const reverbGain = P.__loveCtx.createGain();
+            reverbGain.gain.value = 0.35;
+
+            const masterGain = P.__loveCtx.createGain();
+            masterGain.gain.value = 1.0;
+
+            reverb.connect(reverbGain);
+            reverbGain.connect(masterGain);
+            masterGain.connect(P.__loveCtx.destination);
+
+            P.__loveMaster = masterGain;
+            P.__loveReverb = reverb;
+
+            // ================================================================
+            // PIANO SYNTHESIS — harmonic partials
+            // ================================================================
+            function playPiano(freq, startTime, duration, volume) {
+                const ctx = P.__loveCtx;
+                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+
+                const harmonics = [
+                    { mult: 1, gain: 1.0,  type: 'sine' },
+                    { mult: 2, gain: 0.55, type: 'sine' },
+                    { mult: 3, gain: 0.30, type: 'sine' },
+                    { mult: 4, gain: 0.18, type: 'sine' },
+                    { mult: 5, gain: 0.10, type: 'sine' },
+                    { mult: 6, gain: 0.06, type: 'sine' },
+                ];
+
+                harmonics.forEach(h => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = h.type;
+                    o.frequency.value = freq * h.mult;
+
+                    const amp = volume * h.gain;
+                    g.gain.setValueAtTime(0.0001, startTime);
+                    g.gain.exponentialRampToValueAtTime(amp, startTime + 0.008);
+                    g.gain.exponentialRampToValueAtTime(amp * 0.6, startTime + 0.15);
+                    g.gain.exponentialRampToValueAtTime(amp * 0.25, startTime + duration * 0.5);
+                    g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+                    o.connect(g);
+
+                    const dryGain = ctx.createGain();
+                    dryGain.gain.value = 0.75;
+                    g.connect(dryGain);
+                    dryGain.connect(masterGain);
+
+                    const wetGain = ctx.createGain();
+                    wetGain.gain.value = 0.35;
+                    g.connect(wetGain);
+                    wetGain.connect(reverb);
+
+                    o.start(startTime);
+                    o.stop(startTime + duration + 0.1);
+                });
+            }
+
+            // ================================================================
+            // MUSIK: "River Flows in You" style
+            // Progresi: Am - F - C - G
+            // ================================================================
             const melody = [
-                // Am
                 440.00, 523.25, 659.25, 523.25,
-                // F
                 440.00, 523.25, 698.46, 523.25,
-                // C
                 523.25, 659.25, 783.99, 659.25,
-                // G
                 493.88, 587.33, 739.99, 587.33,
-                // Am (repeat dengan variasi)
-                440.00, 523.25, 659.25, 783.99,
-                // F
-                698.46, 587.33, 523.25, 440.00,
-                // C
-                523.25, 659.25, 783.99, 880.00,
-                // G
-                739.99, 659.25, 587.33, 493.88,
             ];
 
-            // Nada counter-melody (bass oktaf atas, main di antara melodi utama)
-            const counterMelody = [
-                220.00, 261.63, 329.63, 261.63,
-                174.61, 220.00, 261.63, 220.00,
-                261.63, 329.63, 392.00, 329.63,
-                196.00, 246.94, 293.66, 246.94,
-                220.00, 261.63, 329.63, 392.00,
-                349.23, 293.66, 261.63, 220.00,
-                261.63, 329.63, 392.00, 440.00,
-                369.99, 329.63, 293.66, 246.94,
+            const bassLine = [110.00, 87.31, 130.81, 98.00];
+
+            const arpPattern = [
+                [220.00, 261.63, 329.63, 261.63],
+                [174.61, 220.00, 261.63, 220.00],
+                [261.63, 329.63, 392.00, 329.63],
+                [196.00, 246.94, 293.66, 246.94],
             ];
 
-            // Main satu chord + melodi mengalir dalam 3.2 detik
-            function playBar(atTime) {
+            let step = 0;
+
+            function playMeasure(atTime) {
                 const vol = P.__musicVolume;
-                const chord = chords[P.__chordIdx % chords.length];
+                const barIdx = step % 4;
+                const baseTime = atTime;
 
-                // Bass panjang
-                playNote(chord[0], atTime, 4.0, 0.16 * vol, 'sine');
-                playNote(chord[0] * 2, atTime + 0.02, 3.8, 0.06 * vol, 'triangle');
+                playPiano(bassLine[barIdx], baseTime, 3.6, 0.32 * vol);
 
-                // Chord tones
-                for (let i = 1; i < chord.length; i++) {
-                    playNote(chord[i], atTime + i * 0.03, 3.6, 0.06 * vol, 'sine');
+                const arp = arpPattern[barIdx];
+                for (let i = 0; i < arp.length; i++) {
+                    playPiano(arp[i], baseTime + i * 0.72, 1.6, 0.16 * vol);
                 }
 
-                // Melodi mengalir — 4 nada per bar, tiap 0.75 detik
-                for (let k = 0; k < 4; k++) {
-                    const m = melody[P.__melodyIdx % melody.length];
-                    const cm = counterMelody[P.__melodyIdx % counterMelody.length];
-                    playNote(m, atTime + k * 0.72, 1.4, 0.11 * vol, 'triangle');
-                    playNote(cm, atTime + k * 0.72 + 0.05, 1.3, 0.05 * vol, 'sine');
-                    P.__melodyIdx++;
+                const startMel = step * 4;
+                for (let i = 0; i < 4; i++) {
+                    const note = melody[(startMel + i) % melody.length];
+                    playPiano(note, baseTime + i * 0.72 + 0.05, 1.8, 0.22 * vol);
+                    playPiano(note * 2, baseTime + i * 0.72 + 0.08, 1.2, 0.06 * vol);
                 }
 
-                P.__chordIdx++;
+                step++;
             }
 
             function startMusicLoop() {
@@ -350,8 +372,8 @@ def inject_audio_engine():
                 function loop() {
                     if (!P.__musicRunning || !P.__musicEnabled) return;
                     const now = P.__loveCtx.currentTime + 0.05;
-                    playBar(now);
-                    P.__musicTimer = setTimeout(loop, 3050);
+                    playMeasure(now);
+                    P.__musicTimer = setTimeout(loop, 3000);
                 }
                 loop();
             }
@@ -361,129 +383,61 @@ def inject_audio_engine():
                 if (P.__musicTimer) { clearTimeout(P.__musicTimer); P.__musicTimer = null; }
             }
 
-            // ============ SFX ============
-            // Semua SFX dibuat 2-3 nada biar jelas & gak ketelen musik
+            // ================================================================
+            // SFX — pakai piano synth juga
+            // ================================================================
             function sfxPop() {
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
-                const now = ctx.currentTime;
-                // nada A5 → E6, bubble pop
-                [[880, 0], [1318.51, 0.08]].forEach(([f, d]) => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = 'sine';
-                    o.frequency.value = f;
-                    const t = now + d;
-                    g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.5 * P.__sfxVolume, t + 0.015);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-                    o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 0.75);
-                });
+                const now = P.__loveCtx.currentTime;
+                playPiano(880, now, 0.9, 0.55 * P.__sfxVolume);
+                playPiano(1318.51, now + 0.08, 1.0, 0.42 * P.__sfxVolume);
             }
 
             function sfxDing() {
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
-                const now = ctx.currentTime;
-                // nada D major: D6 F#6 A6
+                const now = P.__loveCtx.currentTime;
                 [1174.66, 1479.98, 1760.00].forEach((f, i) => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = 'sine';
-                    o.frequency.value = f;
-                    const t = now + i * 0.06;
-                    g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.42 * P.__sfxVolume, t + 0.015);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
-                    o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 1.0);
+                    playPiano(f, now + i * 0.06, 1.3, 0.35 * P.__sfxVolume);
                 });
-                // tambah shimmer tinggi tipis
-                const o2 = ctx.createOscillator();
-                const g2 = ctx.createGain();
-                o2.type = 'triangle';
-                o2.frequency.value = 2349.32; // D7
-                g2.gain.setValueAtTime(0.0001, now);
-                g2.gain.exponentialRampToValueAtTime(0.15 * P.__sfxVolume, now + 0.02);
-                g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
-                o2.connect(g2); g2.connect(ctx.destination);
-                o2.start(now); o2.stop(now + 0.75);
             }
 
             function sfxChime() {
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
-                const now = ctx.currentTime;
-                // arpeggio D major besar: D5 F#5 A5 D6 F#6 A6 D7
-                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00, 2349.32].forEach((f, i) => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = 'sine';
-                    o.frequency.value = f;
-                    const t = now + i * 0.09;
-                    g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.38 * P.__sfxVolume, t + 0.02);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.7);
-                    o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 1.8);
+                const now = P.__loveCtx.currentTime;
+                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {
+                    playPiano(f, now + i * 0.1, 1.8, 0.32 * P.__sfxVolume);
                 });
             }
 
             function sfxReset() {
-                const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
-                const now = ctx.currentTime;
+                const now = P.__loveCtx.currentTime;
                 [880, 659.25, 440].forEach((f, i) => {
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = 'sine';
-                    o.frequency.value = f;
-                    const t = now + i * 0.08;
-                    g.gain.setValueAtTime(0.0001, t);
-                    g.gain.exponentialRampToValueAtTime(0.4 * P.__sfxVolume, t + 0.015);
-                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-                    o.connect(g); g.connect(ctx.destination);
-                    o.start(t); o.stop(t + 0.55);
+                    playPiano(f, now + i * 0.09, 0.9, 0.35 * P.__sfxVolume);
                 });
             }
 
-            // ============ API UNTUK TRIGGER SFX ============
-            // Fungsi ini bisa dipanggil via postMessage ATAU langsung
+            // ================================================================
+            // API
+            // ================================================================
             P.__lovePlaySfx = function(name) {
                 const now = Date.now();
-                // debounce 100ms biar gak double-fire
-                if (now - P.__lastSfxAt < 100) return;
+                // Debounce 250ms biar gak double
+                if (now - P.__lastSfxAt < 250) return;
                 P.__lastSfxAt = now;
 
-                if (P.__loveCtx.state === 'suspended') {
-                    P.__loveCtx.resume().catch(()=>{});
-                }
+                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{});
                 try {
                     if (name === 'pop') sfxPop();
                     else if (name === 'ding') sfxDing();
                     else if (name === 'chime') sfxChime();
                     else if (name === 'reset') sfxReset();
-                } catch(e) { console.log('SFX error:', e); }
+                } catch(e) {}
             };
 
-            // ============ LISTENER postMessage ============
-            // Ini kunci-nya: setiap iframe Streamlit cukup postMessage ke parent,
-            // gak perlu akses AudioContext langsung
             P.addEventListener('message', function(ev) {
-                try {
-                    const data = ev.data;
-                    if (data && data.__loveSfx) {
-                        P.__lovePlaySfx(data.__loveSfx);
-                    }
-                } catch(e) {}
+                const data = ev.data;
+                if (data && data.__loveSfx) P.__lovePlaySfx(data.__loveSfx);
             });
 
-            // ============ AUTO-PLAY MUSIK ============
             function ensureRunning() {
-                if (P.__loveCtx.state === 'suspended') {
-                    P.__loveCtx.resume().catch(()=>{});
-                }
+                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{});
             }
             P.__loveStartMusicIfNeeded = function() {
                 ensureRunning();
@@ -497,17 +451,14 @@ def inject_audio_engine():
                 }
             };
 
-            // Coba langsung
             P.__loveStartMusicIfNeeded();
 
-            // Fallback: begitu user gerak dikit, musik nyala
             ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => {
-                P.document.addEventListener(ev, () => P.__loveStartMusicIfNeeded(), 
+                P.document.addEventListener(ev, () => P.__loveStartMusicIfNeeded(),
                     { capture: true, passive: true });
             });
             P.addEventListener('focus', () => P.__loveStartMusicIfNeeded());
 
-            // ============ TOGGLE MUSIK ============
             P.__loveToggleMusic = function() {
                 P.__musicEnabled = !P.__musicEnabled;
                 if (P.__musicEnabled) {
@@ -527,8 +478,7 @@ def inject_audio_engine():
 
 
 # =====================================================================
-# TRIGGER SFX via postMessage — JAUH LEBIH RELIABLE daripada akses
-# window.parent langsung, karena postMessage gak butuh script sinkron
+# TRIGGER SFX — kirim SEKALI doang, gak ada retry
 # =====================================================================
 def trigger_sfx(sfx_name: str):
     if not sfx_name:
@@ -538,22 +488,9 @@ def trigger_sfx(sfx_name: str):
     <body>
     <script>
         (function() {{
-            const msg = {{ __loveSfx: '{sfx_name}' }};
-            // kirim ke parent — bisa langsung, gak nunggu apa-apa
             try {{
-                window.parent.postMessage(msg, '*');
-            }} catch(e) {{
-                // fallback: coba akses langsung
-                try {{
-                    if (window.parent && window.parent.__lovePlaySfx) {{
-                        window.parent.__lovePlaySfx('{sfx_name}');
-                    }}
-                }} catch(e2) {{}}
-            }}
-            // retry sekali lagi setelah 200ms sebagai backup
-            setTimeout(() => {{
-                try {{ window.parent.postMessage(msg, '*'); }} catch(e) {{}}
-            }}, 200);
+                window.parent.postMessage({{ __loveSfx: '{sfx_name}' }}, '*');
+            }} catch(e) {{}}
         }})();
     </script>
     </body></html>
@@ -612,12 +549,10 @@ def render_music_toggle():
     components.html(html, height=0)
 
 
-# ================== PASANG AUDIO ENGINE (sekali, permanen) ==================
+# ================== PASANG AUDIO ENGINE ==================
 inject_audio_engine()
 render_music_toggle()
 
-# ================== TRIGGER SFX YANG DIMINTA ==================
-# INI YANG BIKIN SFX BUNYI DI SETIAP NEXT
 if st.session_state.sfx:
     trigger_sfx(st.session_state.sfx)
     st.session_state.sfx = ""
