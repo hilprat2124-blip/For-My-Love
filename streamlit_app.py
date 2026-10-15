@@ -15,7 +15,6 @@ st.set_page_config(
 FOTO_PATH = "assets/foto.jpg"
 
 def load_foto_base64():
-    """Load foto jadi base64 biar bisa dipakai di HTML."""
     if os.path.exists(FOTO_PATH):
         with open(FOTO_PATH, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -217,6 +216,9 @@ if "key_pesan" not in st.session_state:
 if "sfx" not in st.session_state:
     st.session_state.sfx = ""
 
+if "sfx_id" not in st.session_state:
+    st.session_state.sfx_id = 0  # ID unik tiap trigger, biar JS gak skip
+
 
 def ambil_pesan_baru():
     if not st.session_state.sisa_pesan:
@@ -236,7 +238,7 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE — PIANO SUITE (soft, "Through The Years" vibes)
+# AUDIO ENGINE (permanen di window.parent)
 # =====================================================================
 def inject_audio_engine():
     html = """
@@ -256,7 +258,8 @@ def inject_audio_engine():
             P.__musicRunning = false;
             P.__musicTimer = null;
             P.__musicEnabled = true;
-            P.__lastSfxAt = 0;
+            P.__lastSfxTime = 0;
+            P.__lastSfxName = "";
 
             function makeReverbIR(ctx, duration, decay) {
                 const rate = ctx.sampleRate;
@@ -414,23 +417,46 @@ def inject_audio_engine():
                 });
             }
 
-            P.__lovePlaySfx = function(name) {
-                const now = Date.now();
-                if (now - P.__lastSfxAt < 250) return;
-                P.__lastSfxAt = now;
+            // ============================================================
+            // CORE: MAIN SFX — pakai sfx_id unik, jadi gak mungkin skip
+            // ============================================================
+            P.__lovePlaySfx = function(name, id) {
+                // Kalau id sama dengan yang terakhir, skip (biar gak dobel saat rerun)
+                if (id !== undefined && id === P.__lastSfxId) return;
+                P.__lastSfxId = id;
 
-                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{});
+                // Pastikan audio context running
+                if (P.__loveCtx.state === 'suspended') {
+                    P.__loveCtx.resume().then(() => {
+                        fireSfx(name);
+                    }).catch(() => {
+                        fireSfx(name); // tetap coba
+                    });
+                } else {
+                    fireSfx(name);
+                }
+            };
+
+            function fireSfx(name) {
                 try {
                     if (name === 'pop') sfxPop();
                     else if (name === 'ding') sfxDing();
                     else if (name === 'chime') sfxChime();
                     else if (name === 'reset') sfxReset();
-                } catch(e) {}
-            };
+                } catch(e) { console.log('SFX error:', e); }
+            }
 
+            // Fallback: postMessage (kalau akses langsung gagal)
             P.addEventListener('message', function(ev) {
                 const data = ev.data;
-                if (data && data.__loveSfx) P.__lovePlaySfx(data.__loveSfx);
+                if (data && data.__loveSfx) {
+                    P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
+                }
+                if (data && data.__loveFireworks) {
+                    if (typeof P.__loveFireworksFullScreen === 'function') {
+                        P.__loveFireworksFullScreen();
+                    }
+                }
             });
 
             function ensureRunning() {
@@ -475,11 +501,9 @@ def inject_audio_engine():
 
 
 # =====================================================================
-# EFEK GLOBAL: Petal jatuh + Sparkle di SELURUH halaman (semua step)
-# Dipasang di parent, biar muncul terus walau rerun
+# EFEK GLOBAL: Petal, sparkle, love — di SEMUA halaman
 # =====================================================================
 def inject_global_effects():
-    """Petal, sparkle, dan bokeh love jatuh di seluruh layar — SEMUA halaman."""
     html = """
     <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;overflow:hidden;}</style></head>
     <body>
@@ -489,13 +513,11 @@ def inject_global_effects():
             if (P.__loveGlobalEffects) return;
             P.__loveGlobalEffects = true;
 
-            // Container fixed untuk semua efek
             const container = P.document.createElement('div');
             container.id = 'love-effects-layer';
             container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;overflow:hidden;';
             P.document.body.appendChild(container);
 
-            // Style animasi
             const style = P.document.createElement('style');
             style.textContent = `
                 @keyframes lovePetalFall {
@@ -519,43 +541,27 @@ def inject_global_effects():
                     user-select: none;
                     will-change: transform, opacity;
                 }
-                .love-petal {
-                    font-size: 20px;
-                    animation: lovePetalFall linear infinite;
-                }
-                .love-twinkle {
-                    font-size: 14px;
-                    animation: loveTwinkle ease-in-out infinite;
-                }
-                .love-float {
-                    font-size: 22px;
-                    animation: loveFloat ease-in-out infinite;
-                }
+                .love-petal { font-size: 20px; animation: lovePetalFall linear infinite; }
+                .love-twinkle { font-size: 14px; animation: loveTwinkle ease-in-out infinite; }
+                .love-float { font-size: 22px; animation: loveFloat ease-in-out infinite; }
             `;
             P.document.head.appendChild(style);
 
-            // ====== 1. PETAL JATUH (love, bunga, sparkle) ======
             const petalEmojis = ['🌸','🌷','💗','✨','🩷','💖','🌺','💕'];
-            const petalCount = 18;
-
             function createPetal() {
                 const el = P.document.createElement('div');
                 el.className = 'love-petal';
                 el.textContent = petalEmojis[Math.floor(Math.random() * petalEmojis.length)];
                 el.style.left = Math.random() * 100 + 'vw';
                 el.style.fontSize = (Math.random() * 10 + 14) + 'px';
-                const dur = Math.random() * 8 + 9;  // 9-17 detik, jatuh sangat pelan
+                const dur = Math.random() * 8 + 9;
                 el.style.animationDuration = dur + 's';
                 el.style.animationDelay = (Math.random() * 5) + 's';
                 container.appendChild(el);
             }
+            for (let i = 0; i < 18; i++) createPetal();
 
-            for (let i = 0; i < petalCount; i++) createPetal();
-
-            // ====== 2. TWINKLE (sparkle kecil berkelip di posisi random) ======
             const twinkleEmojis = ['✨','⭐','💫','✦'];
-            const twinkleCount = 14;
-
             function createTwinkle() {
                 const el = P.document.createElement('div');
                 el.className = 'love-twinkle';
@@ -567,13 +573,9 @@ def inject_global_effects():
                 el.style.animationDelay = (Math.random() * 3) + 's';
                 container.appendChild(el);
             }
+            for (let i = 0; i < 14; i++) createTwinkle();
 
-            for (let i = 0; i < twinkleCount; i++) createTwinkle();
-
-            // ====== 3. LOVE FLOATING (love yang naik-turun di posisi random) ======
             const floatEmojis = ['💕','💗','🩷','💖','🌸'];
-            const floatCount = 8;
-
             function createFloat() {
                 const el = P.document.createElement('div');
                 el.className = 'love-float';
@@ -586,24 +588,20 @@ def inject_global_effects():
                 el.style.opacity = (Math.random() * 0.3 + 0.4);
                 container.appendChild(el);
             }
+            for (let i = 0; i < 8; i++) createFloat();
 
-            for (let i = 0; i < floatCount; i++) createFloat();
-
-            // ====== 4. REFRESH TWINKLE posisi tiap 8 detik biar gak monoton ======
             setInterval(() => {
-                // Hapus setengah twinkle lama, tambah baru
                 const oldTwinkles = container.querySelectorAll('.love-twinkle');
-                oldTwinkles.forEach((el, i) => {
-                    if (i % 2 === 0) el.remove();
-                });
-                for (let i = 0; i < Math.floor(twinkleCount / 2); i++) {
-                    createTwinkle();
-                }
+                oldTwinkles.forEach((el, i) => { if (i % 2 === 0) el.remove(); });
+                for (let i = 0; i < 7; i++) createTwinkle();
             }, 8000);
 
-            // ====== API: trigger fireworks full screen dari Python ======
             P.__loveFireworksFullScreen = function() {
+                const existing = P.document.getElementById('love-fw-canvas');
+                if (existing) existing.remove();
+
                 const fw = P.document.createElement('canvas');
+                fw.id = 'love-fw-canvas';
                 fw.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9998;';
                 fw.width = P.innerWidth;
                 fw.height = P.innerHeight;
@@ -631,24 +629,17 @@ def inject_global_effects():
                     }
                 }
 
+                let active = true;
                 function animate() {
                     ctx.fillStyle = 'rgba(255, 233, 240, 0.14)';
                     ctx.fillRect(0, 0, fw.width, fw.height);
-
                     for (let i = particles.length - 1; i >= 0; i--) {
                         const p = particles[i];
-                        p.x += p.vx;
-                        p.y += p.vy;
+                        p.x += p.vx; p.y += p.vy;
                         p.vy += 0.045;
-                        p.vx *= 0.985;
-                        p.vy *= 0.985;
+                        p.vx *= 0.985; p.vy *= 0.985;
                         p.life -= p.decay;
-
-                        if (p.life <= 0) {
-                            particles.splice(i, 1);
-                            continue;
-                        }
-
+                        if (p.life <= 0) { particles.splice(i, 1); continue; }
                         ctx.globalAlpha = Math.max(p.life, 0);
                         ctx.fillStyle = p.color;
                         ctx.beginPath();
@@ -656,8 +647,7 @@ def inject_global_effects():
                         ctx.fill();
                     }
                     ctx.globalAlpha = 1;
-
-                    if (particles.length > 0 || P.__loveFireworksActive) {
+                    if (active || particles.length > 0) {
                         requestAnimationFrame(animate);
                     } else {
                         fw.remove();
@@ -665,13 +655,11 @@ def inject_global_effects():
                 }
                 animate();
 
-                // Ledakan beruntun
-                P.__loveFireworksActive = true;
                 const start = Date.now();
                 const interval = setInterval(() => {
-                    if (Date.now() - start > 12000) {  // 12 detik fireworks
+                    if (Date.now() - start > 12000) {
                         clearInterval(interval);
-                        P.__loveFireworksActive = false;
+                        active = false;
                         return;
                     }
                     createFirework(
@@ -680,18 +668,10 @@ def inject_global_effects():
                     );
                 }, 400);
 
-                // Opening burst
                 setTimeout(() => createFirework(fw.width * 0.5, fw.height * 0.3), 200);
                 setTimeout(() => createFirework(fw.width * 0.25, fw.height * 0.45), 500);
                 setTimeout(() => createFirework(fw.width * 0.75, fw.height * 0.4), 800);
             };
-
-            // Listener: kalau dapat postMessage __loveFireworks, trigger
-            P.addEventListener('message', function(ev) {
-                if (ev.data && ev.data.__loveFireworks) {
-                    P.__loveFireworksFullScreen();
-                }
-            });
         })();
     </script>
     </body></html>
@@ -700,9 +680,10 @@ def inject_global_effects():
 
 
 # =====================================================================
-# TRIGGER SFX — kirim SEKALI doang
+# TRIGGER SFX — pakai sfx_id unik biar GAK PERNAH skip
+# Ini yang bikin "kadang bunyi kadang ngga" hilang
 # =====================================================================
-def trigger_sfx(sfx_name: str):
+def trigger_sfx(sfx_name: str, sfx_id: int):
     if not sfx_name:
         return
     html = f"""
@@ -710,8 +691,31 @@ def trigger_sfx(sfx_name: str):
     <body>
     <script>
         (function() {{
+            const id = {sfx_id};
+            const name = '{sfx_name}';
+            const P = window.parent;
+
+            function fire() {{
+                // Coba akses langsung dulu (paling reliable)
+                if (typeof P.__lovePlaySfx === 'function') {{
+                    P.__lovePlaySfx(name, id);
+                    return true;
+                }}
+                return false;
+            }}
+
+            // Kalau engine belum ada, coba lagi beberapa kali
+            if (!fire()) {{
+                let tries = 0;
+                const iv = setInterval(() => {{
+                    tries++;
+                    if (fire() || tries > 10) clearInterval(iv);
+                }}, 40);
+            }}
+
+            // Fallback: postMessage (kalau akses langsung gagal karena cross-origin)
             try {{
-                window.parent.postMessage({{ __loveSfx: '{sfx_name}' }}, '*');
+                P.postMessage({{ __loveSfx: name, __loveSfxId: id }}, '*');
             }} catch(e) {{}}
         }})();
     </script>
@@ -720,18 +724,18 @@ def trigger_sfx(sfx_name: str):
     components.html(html, height=0)
 
 
-# =====================================================================
-# TRIGGER FIREWORKS FULL SCREEN
-# =====================================================================
 def trigger_fireworks():
     html = """
     <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;}</style></head>
     <body>
     <script>
         (function() {
-            try {
-                window.parent.postMessage({ __loveFireworks: true }, '*');
-            } catch(e) {}
+            const P = window.parent;
+            if (typeof P.__loveFireworksFullScreen === 'function') {
+                P.__loveFireworksFullScreen();
+            } else {
+                try { P.postMessage({ __loveFireworks: true }, '*'); } catch(e) {}
+            }
         })();
     </script>
     </body></html>
@@ -747,8 +751,7 @@ def render_music_toggle():
         body { margin:0; padding:0; background:transparent; overflow:hidden; }
         #musicToggle {
             position: fixed;
-            top: 12px;
-            right: 12px;
+            top: 12px; right: 12px;
             background: rgba(255,255,255,0.95);
             border: 2px solid #ffb3cc;
             color: #d6336c;
@@ -790,13 +793,14 @@ def render_music_toggle():
     components.html(html, height=0)
 
 
-# ================== PASANG AUDIO + EFEK GLOBAL ==================
+# ================== PASANG AUDIO + EFEK ==================
 inject_audio_engine()
-inject_global_effects()  # <=== petal, sparkle, love jatuh di seluruh halaman
+inject_global_effects()
 render_music_toggle()
 
+# ================== TRIGGER SFX (setelah engine terpasang) ==================
 if st.session_state.sfx:
-    trigger_sfx(st.session_state.sfx)
+    trigger_sfx(st.session_state.sfx, st.session_state.sfx_id)
     st.session_state.sfx = ""
 
 
@@ -818,6 +822,7 @@ if st.session_state.step == 0:
         st.session_state.step = 1
         ambil_pesan_baru()
         st.session_state.sfx = "pop"
+        st.session_state.sfx_id += 1
         st.rerun()
 
 
@@ -846,6 +851,7 @@ elif st.session_state.step == 1:
         if st.button("Lanjut, buka kotak berikutnya 🌷"):
             ambil_pesan_baru()
             st.session_state.sfx = "ding"
+            st.session_state.sfx_id += 1
             st.rerun()
     else:
         st.markdown(
@@ -856,22 +862,22 @@ elif st.session_state.step == 1:
         if st.button("Buka yang terakhir ✨"):
             st.session_state.step = 99
             st.session_state.sfx = "chime"
+            st.session_state.sfx_id += 1
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Ulang dari awal"):
         reset_semua()
         st.session_state.sfx = "reset"
+        st.session_state.sfx_id += 1
         st.rerun()
 
 
 # ================== HALAMAN 99: SURPRISE ==================
 elif st.session_state.step == 99:
 
-    # Trigger fireworks full screen (di parent layer, bukan di iframe kalimat)
     trigger_fireworks()
 
-    # Siapkan foto HTML
     if FOTO_B64:
         foto_html = f'''
         <div class="foto-frame">
@@ -900,16 +906,10 @@ elif st.session_state.step == 99:
     <head>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Nunito:wght@400;600;700&display=swap');
-        html, body {{
-            margin:0; padding:0;
-            background:transparent;
-            font-family:'Nunito',sans-serif;
-            overflow:hidden;
-        }}
+        html, body {{ margin:0; padding:0; background:transparent; font-family:'Nunito',sans-serif; overflow:hidden; }}
 
         .konten {{
-            position:relative;
-            z-index:3;
+            position:relative; z-index:3;
             background:rgba(255,255,255,0.96);
             border-radius:26px;
             padding:36px 30px 30px 30px;
@@ -926,7 +926,6 @@ elif st.session_state.step == 99:
             100% {{ opacity:1; transform:scale(1) translateY(0); }}
         }}
 
-        /* ============ FOTO AESTHETIC ============ */
         .foto-frame {{
             display: inline-block;
             background: #fff;
@@ -942,43 +941,34 @@ elif st.session_state.step == 99:
             transition: transform 0.4s ease;
             animation: fotoIn 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
         }}
-        .foto-frame:hover {{
-            transform: rotate(0deg) scale(1.03);
-        }}
+        .foto-frame:hover {{ transform: rotate(0deg) scale(1.03); }}
 
         @keyframes fotoIn {{
             0% {{ opacity:0; transform: rotate(-8deg) scale(0.7) translateY(30px); }}
             100% {{ opacity:1; transform: rotate(-2.2deg) scale(1) translateY(0); }}
         }}
 
-        /* pita washi tape di atas foto */
         .foto-frame::before {{
             content: "";
             position: absolute;
-            top: -12px;
-            left: 50%;
+            top: -12px; left: 50%;
             transform: translateX(-50%) rotate(-3deg);
-            width: 90px;
-            height: 26px;
-            background: linear-gradient(135deg,
-                rgba(255,179,204,0.85),
-                rgba(255,143,187,0.85));
+            width: 90px; height: 26px;
+            background: linear-gradient(135deg, rgba(255,179,204,0.85), rgba(255,143,187,0.85));
             border-radius: 2px;
             box-shadow: 0 2px 6px rgba(214,51,108,0.25);
             opacity: 0.92;
         }}
 
         .foto-inner {{
-            width: 260px;
-            height: 260px;
+            width: 260px; height: 260px;
             overflow: hidden;
             background: #ffe9f0;
             border-radius: 2px;
             position: relative;
         }}
         .foto-inner img {{
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             object-fit: cover;
             display: block;
             filter: saturate(1.05) contrast(1.02) brightness(1.03);
@@ -986,9 +976,7 @@ elif st.session_state.step == 99:
 
         .foto-caption {{
             position: absolute;
-            bottom: 12px;
-            left: 0;
-            right: 0;
+            bottom: 12px; left: 0; right: 0;
             text-align: center;
             font-family: 'Caveat', cursive;
             font-size: 1.25em;
@@ -996,12 +984,10 @@ elif st.session_state.step == 99:
             letter-spacing: 0.3px;
         }}
 
-        /* hati kecil di pojok foto */
         .foto-frame::after {{
             content: "💕";
             position: absolute;
-            bottom: 14px;
-            right: 16px;
+            bottom: 14px; right: 16px;
             font-size: 18px;
             opacity: 0.85;
             animation: heartbeat 2s ease-in-out infinite;
@@ -1012,7 +998,6 @@ elif st.session_state.step == 99:
             50% {{ transform: scale(1.18); }}
         }}
 
-        /* ============ JUDUL & PARAGRAF ============ */
         .judul-surprise {{
             font-family:'Caveat', cursive;
             font-size:2.4em;
@@ -1059,9 +1044,7 @@ elif st.session_state.step == 99:
     <div class="konten">
         <div class="judul-surprise">Untuk kamu 🌸</div>
         <div class="garis"></div>
-
         {foto_html}
-
         <div class="paragraf">{kalimat_penutup}</div>
         <div class="ttd">— dari aku, yang sayang banget sama kamu</div>
     </div>
@@ -1075,6 +1058,7 @@ elif st.session_state.step == 99:
     if st.button("🔄 Ulang dari awal ya"):
         reset_semua()
         st.session_state.sfx = "reset"
+        st.session_state.sfx_id += 1
         st.rerun()
 
 
