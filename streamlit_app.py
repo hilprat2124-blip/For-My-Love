@@ -22,6 +22,17 @@ def load_foto_base64():
 
 FOTO_B64 = load_foto_base64()
 
+# ================== LOAD LAGU ==================
+LAGU_PATH = "assets/lagu.mp3"
+
+def load_lagu_base64():
+    if os.path.exists(LAGU_PATH):
+        with open(LAGU_PATH, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return None
+
+LAGU_B64 = load_lagu_base64()
+
 # ================== KATA SEMANGAT NUGAS ==================
 kata_nugas = [
     "Sayang... aku tahu kamu capek, tapi aku percaya kamu pasti bisa. Semangat ya, cintakuu.",
@@ -217,7 +228,7 @@ if "sfx" not in st.session_state:
     st.session_state.sfx = ""
 
 if "sfx_id" not in st.session_state:
-    st.session_state.sfx_id = 0  # ID unik tiap trigger, biar JS gak skip
+    st.session_state.sfx_id = 0
 
 
 def ambil_pesan_baru():
@@ -238,41 +249,54 @@ def reset_semua():
 
 
 # =====================================================================
-# AUDIO ENGINE (permanen di window.parent)
+# AUDIO ENGINE — SFX + MUSIK (MP3 kalau ada, fallback synth)
 # =====================================================================
 def inject_audio_engine():
-    html = """
-    <!DOCTYPE html><html><head><style>body{margin:0;background:transparent;overflow:hidden;}</style></head>
+    # Siapkan sumber lagu
+    if LAGU_B64:
+        lagu_src = f"data:audio/mpeg;base64,{LAGU_B64}"
+        pakai_mp3 = True
+    else:
+        lagu_src = ""
+        pakai_mp3 = False
+
+    html = f"""
+    <!DOCTYPE html><html><head><style>body{{margin:0;background:transparent;overflow:hidden;}}</style></head>
     <body>
+    <audio id="loveLagu" loop preload="auto" style="display:none;">
+        <source src="{lagu_src}" type="audio/mpeg">
+    </audio>
     <script>
-        (function() {
+        (function() {{
             const P = window.parent;
-            if (P.__loveThroughYears) return;
-            P.__loveThroughYears = true;
+            if (P.__loveInstalled) return;
+            P.__loveInstalled = true;
+
+            const PAKAI_MP3 = {str(pakai_mp3).lower()};
 
             const AudioCtx = P.AudioContext || P.webkitAudioContext;
             P.__loveCtx = new AudioCtx();
 
-            P.__musicVolume = 0.55;
-            P.__sfxVolume = 0.55;
-            P.__musicRunning = false;
-            P.__musicTimer = null;
+            P.__musicVolume = 0.6;
+            P.__sfxVolume = 0.7;
             P.__musicEnabled = true;
-            P.__lastSfxTime = 0;
-            P.__lastSfxName = "";
+            P.__lastSfxId = null;
+            P.__synthMusicRunning = false;
+            P.__synthMusicTimer = null;
 
-            function makeReverbIR(ctx, duration, decay) {
+            // ============ REVERB ============
+            function makeReverbIR(ctx, duration, decay) {{
                 const rate = ctx.sampleRate;
                 const length = rate * duration;
                 const impulse = ctx.createBuffer(2, length, rate);
-                for (let ch = 0; ch < 2; ch++) {
+                for (let ch = 0; ch < 2; ch++) {{
                     const data = impulse.getChannelData(ch);
-                    for (let i = 0; i < length; i++) {
+                    for (let i = 0; i < length; i++) {{
                         data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-                    }
-                }
+                    }}
+                }}
                 return impulse;
-            }
+            }}
 
             const reverbIR = makeReverbIR(P.__loveCtx, 4.5, 2.5);
             const reverb = P.__loveCtx.createConvolver();
@@ -291,18 +315,19 @@ def inject_audio_engine():
             P.__loveMaster = masterGain;
             P.__loveReverb = reverb;
 
-            function playPiano(freq, startTime, duration, volume) {
+            // ============ PIANO SYNTH (buat SFX & fallback musik) ============
+            function playPiano(freq, startTime, duration, volume) {{
                 const ctx = P.__loveCtx;
-                if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+                if (ctx.state === 'suspended') ctx.resume().catch(()=>{{}});
 
                 const harmonics = [
-                    { mult: 1, gain: 1.0,  type: 'sine' },
-                    { mult: 2, gain: 0.42, type: 'sine' },
-                    { mult: 3, gain: 0.18, type: 'sine' },
-                    { mult: 4, gain: 0.08, type: 'sine' },
+                    {{ mult: 1, gain: 1.0,  type: 'sine' }},
+                    {{ mult: 2, gain: 0.42, type: 'sine' }},
+                    {{ mult: 3, gain: 0.18, type: 'sine' }},
+                    {{ mult: 4, gain: 0.08, type: 'sine' }},
                 ];
 
-                harmonics.forEach(h => {
+                harmonics.forEach(h => {{
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.type = h.type;
@@ -329,171 +354,171 @@ def inject_audio_engine():
 
                     o.start(startTime);
                     o.stop(startTime + duration + 0.1);
-                });
-            }
+                }});
+            }}
 
+            // ============ MUSIK: MP3 atau Fallback SYNTH ============
+            const audioEl = document.getElementById('loveLagu');
+
+            function startMusic() {{
+                if (!P.__musicEnabled) return;
+                if (PAKAI_MP3 && audioEl) {{
+                    audioEl.volume = 0.35;  // volume lembut
+                    audioEl.play().catch(e => {{}});
+                }} else {{
+                    startSynthMusic();
+                }}
+            }}
+
+            function stopMusic() {{
+                if (PAKAI_MP3 && audioEl) {{
+                    audioEl.pause();
+                }} else {{
+                    P.__synthMusicRunning = false;
+                    if (P.__synthMusicTimer) {{
+                        clearTimeout(P.__synthMusicTimer);
+                        P.__synthMusicTimer = null;
+                    }}
+                }}
+            }}
+
+            // ---- Fallback: Synthesized piano ballad ----
             const bassLine = [130.81, 164.81, 174.61, 196.00];
-
             const arpChords = [
                 [261.63, 329.63, 392.00, 493.88],
                 [329.63, 392.00, 493.88, 587.33],
                 [349.23, 440.00, 523.25, 659.25],
                 [392.00, 523.25, 587.33, 698.46],
             ];
-
             const melodyPhrases = [
                 [523.25, 659.25, 783.99, 659.25],
                 [587.33, 659.25, 783.99, 987.77],
                 [880.00, 783.99, 698.46, 659.25],
                 [587.33, 659.25, 587.33, 523.25],
             ];
+            let synthStep = 0;
 
-            let step = 0;
-
-            function playMeasure(atTime) {
+            function playMeasure(atTime) {{
                 const vol = P.__musicVolume;
-                const barIdx = step % 4;
+                const barIdx = synthStep % 4;
                 const baseTime = atTime;
-
                 playPiano(bassLine[barIdx], baseTime, 4.2, 0.30 * vol);
-
                 const arp = arpChords[barIdx];
-                for (let i = 0; i < arp.length; i++) {
+                for (let i = 0; i < arp.length; i++) {{
                     playPiano(arp[i], baseTime + i * 0.85, 2.0, 0.14 * vol);
-                }
-
+                }}
                 const phrase = melodyPhrases[barIdx];
-                for (let i = 0; i < 4; i++) {
+                for (let i = 0; i < 4; i++) {{
                     const note = phrase[i];
                     playPiano(note, baseTime + i * 0.85 + 0.1, 2.2, 0.20 * vol);
                     playPiano(note * 2, baseTime + i * 0.85 + 0.15, 1.4, 0.045 * vol);
-                }
+                }}
+                synthStep++;
+            }}
 
-                step++;
-            }
-
-            function startMusicLoop() {
-                if (!P.__musicEnabled || P.__musicRunning) return;
-                P.__musicRunning = true;
-
-                function loop() {
-                    if (!P.__musicRunning || !P.__musicEnabled) return;
+            function startSynthMusic() {{
+                if (P.__synthMusicRunning) return;
+                P.__synthMusicRunning = true;
+                function loop() {{
+                    if (!P.__synthMusicRunning || !P.__musicEnabled) return;
                     const now = P.__loveCtx.currentTime + 0.05;
                     playMeasure(now);
-                    P.__musicTimer = setTimeout(loop, 3400);
-                }
+                    P.__synthMusicTimer = setTimeout(loop, 3400);
+                }}
                 loop();
-            }
+            }}
 
-            function stopMusicLoop() {
-                P.__musicRunning = false;
-                if (P.__musicTimer) { clearTimeout(P.__musicTimer); P.__musicTimer = null; }
-            }
-
-            function sfxPop() {
+            // ============ SFX ============
+            function sfxPop() {{
                 const now = P.__loveCtx.currentTime;
                 playPiano(880, now, 1.0, 0.45 * P.__sfxVolume);
                 playPiano(1318.51, now + 0.08, 1.1, 0.35 * P.__sfxVolume);
-            }
-
-            function sfxDing() {
+            }}
+            function sfxDing() {{
                 const now = P.__loveCtx.currentTime;
-                [1174.66, 1479.98, 1760.00].forEach((f, i) => {
+                [1174.66, 1479.98, 1760.00].forEach((f, i) => {{
                     playPiano(f, now + i * 0.07, 1.4, 0.30 * P.__sfxVolume);
-                });
-            }
-
-            function sfxChime() {
+                }});
+            }}
+            function sfxChime() {{
                 const now = P.__loveCtx.currentTime;
-                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {
+                [587.33, 739.99, 880.00, 1174.66, 1479.98, 1760.00].forEach((f, i) => {{
                     playPiano(f, now + i * 0.12, 2.0, 0.28 * P.__sfxVolume);
-                });
-            }
-
-            function sfxReset() {
+                }});
+            }}
+            function sfxReset() {{
                 const now = P.__loveCtx.currentTime;
-                [880, 659.25, 440].forEach((f, i) => {
+                [880, 659.25, 440].forEach((f, i) => {{
                     playPiano(f, now + i * 0.1, 1.0, 0.30 * P.__sfxVolume);
-                });
-            }
+                }});
+            }}
 
-            // ============================================================
-            // CORE: MAIN SFX — pakai sfx_id unik, jadi gak mungkin skip
-            // ============================================================
-            P.__lovePlaySfx = function(name, id) {
-                // Kalau id sama dengan yang terakhir, skip (biar gak dobel saat rerun)
+            // ============ CORE: Play SFX — pakai sfx_id unik ============
+            P.__lovePlaySfx = function(name, id) {{
                 if (id !== undefined && id === P.__lastSfxId) return;
                 P.__lastSfxId = id;
 
-                // Pastikan audio context running
-                if (P.__loveCtx.state === 'suspended') {
-                    P.__loveCtx.resume().then(() => {
-                        fireSfx(name);
-                    }).catch(() => {
-                        fireSfx(name); // tetap coba
-                    });
-                } else {
+                if (P.__loveCtx.state === 'suspended') {{
+                    P.__loveCtx.resume().then(() => fireSfx(name)).catch(() => fireSfx(name));
+                }} else {{
                     fireSfx(name);
-                }
-            };
+                }}
+            }};
 
-            function fireSfx(name) {
-                try {
+            function fireSfx(name) {{
+                try {{
                     if (name === 'pop') sfxPop();
                     else if (name === 'ding') sfxDing();
                     else if (name === 'chime') sfxChime();
                     else if (name === 'reset') sfxReset();
-                } catch(e) { console.log('SFX error:', e); }
-            }
+                }} catch(e) {{}}
+            }}
 
-            // Fallback: postMessage (kalau akses langsung gagal)
-            P.addEventListener('message', function(ev) {
+            // Fallback postMessage
+            P.addEventListener('message', function(ev) {{
                 const data = ev.data;
-                if (data && data.__loveSfx) {
-                    P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
-                }
-                if (data && data.__loveFireworks) {
-                    if (typeof P.__loveFireworksFullScreen === 'function') {
-                        P.__loveFireworksFullScreen();
-                    }
-                }
-            });
+                if (data && data.__loveSfx) P.__lovePlaySfx(data.__loveSfx, data.__loveSfxId);
+                if (data && data.__loveFireworks && typeof P.__loveFireworksFullScreen === 'function') {{
+                    P.__loveFireworksFullScreen();
+                }}
+            }});
 
-            function ensureRunning() {
-                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{});
-            }
-            P.__loveStartMusicIfNeeded = function() {
+            function ensureRunning() {{
+                if (P.__loveCtx.state === 'suspended') P.__loveCtx.resume().catch(()=>{{}});
+            }}
+
+            P.__loveStartMusicIfNeeded = function() {{
                 ensureRunning();
-                if (P.__loveCtx.state === 'running') {
-                    startMusicLoop();
-                } else {
-                    setTimeout(() => {
+                if (P.__loveCtx.state === 'running') {{
+                    startMusic();
+                }} else {{
+                    setTimeout(() => {{
                         ensureRunning();
-                        if (P.__loveCtx.state === 'running') startMusicLoop();
-                    }, 250);
-                }
-            };
+                        if (P.__loveCtx.state === 'running') startMusic();
+                    }}, 250);
+                }}
+            }};
 
             P.__loveStartMusicIfNeeded();
 
-            ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => {
+            ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => {{
                 P.document.addEventListener(ev, () => P.__loveStartMusicIfNeeded(),
-                    { capture: true, passive: true });
-            });
+                    {{ capture: true, passive: true }});
+            }});
             P.addEventListener('focus', () => P.__loveStartMusicIfNeeded());
 
-            P.__loveToggleMusic = function() {
+            P.__loveToggleMusic = function() {{
                 P.__musicEnabled = !P.__musicEnabled;
-                if (P.__musicEnabled) {
+                if (P.__musicEnabled) {{
                     ensureRunning();
-                    startMusicLoop();
-                } else {
-                    stopMusicLoop();
-                }
+                    startMusic();
+                }} else {{
+                    stopMusic();
+                }}
                 return P.__musicEnabled;
-            };
-            P.__loveMusicEnabled = function() { return P.__musicEnabled; };
-        })();
+            }};
+            P.__loveMusicEnabled = function() {{ return P.__musicEnabled; }};
+        }})();
     </script>
     </body></html>
     """
@@ -501,7 +526,7 @@ def inject_audio_engine():
 
 
 # =====================================================================
-# EFEK GLOBAL: Petal, sparkle, love — di SEMUA halaman
+# EFEK GLOBAL: Petal, sparkle, love jatuh di SEMUA halaman
 # =====================================================================
 def inject_global_effects():
     html = """
@@ -680,8 +705,7 @@ def inject_global_effects():
 
 
 # =====================================================================
-# TRIGGER SFX — pakai sfx_id unik biar GAK PERNAH skip
-# Ini yang bikin "kadang bunyi kadang ngga" hilang
+# TRIGGER SFX — pakai sfx_id unik biar gak pernah skip
 # =====================================================================
 def trigger_sfx(sfx_name: str, sfx_id: int):
     if not sfx_name:
@@ -696,7 +720,6 @@ def trigger_sfx(sfx_name: str, sfx_id: int):
             const P = window.parent;
 
             function fire() {{
-                // Coba akses langsung dulu (paling reliable)
                 if (typeof P.__lovePlaySfx === 'function') {{
                     P.__lovePlaySfx(name, id);
                     return true;
@@ -704,7 +727,6 @@ def trigger_sfx(sfx_name: str, sfx_id: int):
                 return false;
             }}
 
-            // Kalau engine belum ada, coba lagi beberapa kali
             if (!fire()) {{
                 let tries = 0;
                 const iv = setInterval(() => {{
@@ -713,7 +735,6 @@ def trigger_sfx(sfx_name: str, sfx_id: int):
                 }}, 40);
             }}
 
-            // Fallback: postMessage (kalau akses langsung gagal karena cross-origin)
             try {{
                 P.postMessage({{ __loveSfx: name, __loveSfxId: id }}, '*');
             }} catch(e) {{}}
@@ -798,7 +819,7 @@ inject_audio_engine()
 inject_global_effects()
 render_music_toggle()
 
-# ================== TRIGGER SFX (setelah engine terpasang) ==================
+# ================== TRIGGER SFX ==================
 if st.session_state.sfx:
     trigger_sfx(st.session_state.sfx, st.session_state.sfx_id)
     st.session_state.sfx = ""
